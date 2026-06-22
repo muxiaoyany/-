@@ -1,0 +1,3256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎲 吹牛5骰 - Liar's Dice</title>
+<style>
+  /* ===== DESIGN TOKENS ===== */
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1f2937;
+    --border: #30363d;
+    --accent: #f59e0b;
+    --accent2: #ef4444;
+    --accent3: #10b981;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #58a6ff;
+    --dice-p: #fbbf24;
+    --dice-a: #64748b;
+    --red: #ef4444;
+    --green: #10b981;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --radius: 12px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.5);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ===== HEADER ===== */
+  #header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  #header h1 { font-size: 1.2rem; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
+  #header-right { display: flex; gap: 10px; align-items: center; }
+  .btn-sm {
+    padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text); cursor: pointer;
+    font-size: 0.8rem; transition: all 0.2s;
+  }
+  .btn-sm:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+  .btn-sm.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+  /* ===== SCOREBOARD ===== */
+  #scoreboard {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  .score-item { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+  .score-label { color: var(--text2); font-size: 0.75rem; }
+  .score-val { font-weight: 700; font-size: 1rem; }
+  .score-sep { color: var(--border); font-size: 1.2rem; }
+  .multiplier-badge {
+    padding: 3px 10px; border-radius: 20px; font-weight: 700; font-size: 0.8rem;
+    background: var(--surface2); border: 1px solid var(--border);
+  }
+  .mult-1 { color: var(--text2); }
+  .mult-2 { color: var(--accent); border-color: var(--accent); }
+  .mult-4 { color: var(--red); border-color: var(--red); animation: pulse 1s infinite; }
+  .zhai-badge {
+    padding: 3px 10px; border-radius: 20px; font-weight: 700; font-size: 0.8rem;
+    background: var(--purple); color: #fff;
+  }
+  .streak { color: var(--accent); font-weight: 700; }
+
+  /* ===== MAIN LAYOUT ===== */
+  #game-area {
+    display: flex; flex-direction: column;
+    max-width: 900px; margin: 0 auto; padding: 20px;
+    gap: 16px; min-height: calc(100vh - 100px);
+  }
+
+  /* ===== PLAYER PANELS ===== */
+  .player-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    position: relative;
+  }
+  .player-panel.opponent { border-color: var(--dice-a); }
+  .player-panel.self { border-color: var(--accent); }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .panel-title {
+    font-weight: 700; font-size: 0.95rem;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title .role-badge {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 20px;
+    font-weight: 600;
+  }
+  .ai-badge { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+  .you-badge { background: var(--accent); color: #000; }
+  .lock-badge {
+    font-size: 0.72rem; color: var(--text2);
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 2px 8px; border-radius: 20px;
+  }
+  .last-action {
+    font-size: 0.8rem; color: var(--text2);
+    margin-top: 8px; min-height: 18px;
+  }
+  .last-action strong { color: var(--text3); }
+
+  /* ===== DICE ===== */
+  .dice-row {
+    display: flex; gap: 12px; align-items: center;
+    flex-wrap: wrap;
+  }
+  .die {
+    width: 56px; height: 56px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; font-weight: 900;
+    position: relative;
+    transition: transform 0.3s;
+    user-select: none;
+    cursor: default;
+  }
+  .die.player-die {
+    background: linear-gradient(135deg, #2d1f00, #1a1200);
+    border: 2px solid var(--dice-p);
+    color: var(--dice-p);
+    box-shadow: 0 0 12px rgba(251,191,36,0.3);
+  }
+  .die.player-die.wild {
+    border-color: var(--accent3);
+    color: var(--accent3);
+    box-shadow: 0 0 12px rgba(16,185,129,0.4);
+  }
+  .die.opponent-die {
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    color: var(--text2);
+  }
+  .die.hidden { cursor: default; }
+  .die.revealed {
+    background: linear-gradient(135deg, #0c1a2e, #0a1220);
+    border-color: var(--blue);
+    color: var(--blue);
+    box-shadow: 0 0 12px rgba(59,130,246,0.3);
+  }
+  .die.rolling { animation: rollDie 0.5s ease-out; }
+  @keyframes rollDie {
+    0% { transform: rotate(0deg) scale(1); }
+    25% { transform: rotate(180deg) scale(1.2); }
+    75% { transform: rotate(270deg) scale(0.9); }
+    100% { transform: rotate(360deg) scale(1); }
+  }
+  .die-cover {
+    font-size: 1.4rem;
+  }
+
+  /* Pip-style dice using SVG-like approach */
+  .pip-die {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 3px; padding: 8px;
+  }
+  .pip {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: currentColor;
+  }
+  .pip.empty { background: transparent; }
+
+  /* ===== BID DISPLAY ===== */
+  #current-bid {
+    text-align: center;
+    padding: 14px 20px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  #bid-text {
+    font-size: 1.5rem; font-weight: 900;
+    color: var(--accent);
+    letter-spacing: 2px;
+  }
+  #bid-sub { font-size: 0.8rem; color: var(--text2); margin-top: 4px; }
+  #bid-who { font-size: 0.8rem; color: var(--text3); }
+
+  /* ===== ACTION BUTTONS ===== */
+  #action-bar {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    padding: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+  .btn-action {
+    padding: 10px 20px; border-radius: 10px;
+    font-size: 0.9rem; font-weight: 700;
+    cursor: pointer; transition: all 0.2s;
+    border: 2px solid transparent;
+    min-width: 80px;
+  }
+  .btn-call { background: var(--blue); color: #fff; }
+  .btn-call:hover:not(:disabled) { background: #2563eb; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59,130,246,0.4); }
+  .btn-open { background: var(--red); color: #fff; }
+  .btn-open:hover:not(:disabled) { background: #dc2626; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(239,68,68,0.4); }
+  .btn-pi { background: var(--accent); color: #000; }
+  .btn-pi:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(245,158,11,0.4); }
+  .btn-fanpi { background: var(--red); color: #fff; border-color: var(--accent); }
+  .btn-fanpi:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(239,68,68,0.4); }
+  .btn-zhai { background: var(--purple); color: #fff; }
+  .btn-zhai:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(139,92,246,0.4); }
+  .btn-next { background: var(--green); color: #fff; }
+  .btn-next:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
+  .btn-action:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+
+  /* ===== BID MODAL ===== */
+  #modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75); z-index: 200;
+    align-items: center; justify-content: center;
+  }
+  #modal-overlay.show { display: flex; }
+  #modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    min-width: 340px; max-width: 420px;
+    box-shadow: var(--shadow);
+  }
+  #modal-box h2 { font-size: 1.1rem; margin-bottom: 20px; color: var(--accent); }
+  .modal-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .modal-label { color: var(--text2); font-size: 0.85rem; min-width: 50px; }
+  .selector-group { display: flex; gap: 6px; flex-wrap: wrap; }
+  .sel-btn {
+    width: 38px; height: 38px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); cursor: pointer; font-weight: 700;
+    transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+  }
+  .sel-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .sel-btn.selected { background: var(--accent); color: #000; border-color: var(--accent); }
+  .modal-error { color: var(--red); font-size: 0.8rem; min-height: 18px; margin-bottom: 10px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 8px; }
+  .btn-confirm { background: var(--blue); color: #fff; padding: 10px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; }
+  .btn-cancel { background: var(--surface2); color: var(--text); padding: 10px 24px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+
+  /* ===== RESULT MODAL ===== */
+  #result-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85); z-index: 300;
+    align-items: center; justify-content: center;
+  }
+  #result-overlay.show { display: flex; }
+  #result-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 32px 40px;
+    max-width: 500px; width: 90%;
+    text-align: center;
+    box-shadow: var(--shadow);
+    animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  @keyframes popIn {
+    from { transform: scale(0.7); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  #result-title { font-size: 2rem; font-weight: 900; margin-bottom: 8px; }
+  .win { color: var(--green); }
+  .lose { color: var(--red); }
+  #result-detail { color: var(--text2); font-size: 0.9rem; line-height: 1.7; margin: 16px 0; }
+  #result-detail strong { color: var(--text); }
+  #result-dice-display { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0; }
+  .result-die {
+    width: 44px; height: 44px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.3rem; font-weight: 900;
+    border: 2px solid;
+  }
+  .result-die.player-r { background: rgba(251,191,36,0.15); border-color: var(--dice-p); color: var(--dice-p); }
+  .result-die.opponent-r { background: rgba(59,130,246,0.15); border-color: var(--blue); color: var(--blue); }
+  .result-die.counted { background: rgba(16,185,129,0.2); border-color: var(--green); color: var(--green); box-shadow: 0 0 8px rgba(16,185,129,0.4); }
+  #result-summary { font-size: 1.1rem; font-weight: 700; margin: 12px 0; color: var(--text); }
+  #result-mult { font-size: 0.85rem; color: var(--accent); margin-bottom: 16px; }
+  #result-next { background: var(--green); color: #fff; padding: 12px 32px; border: none; border-radius: 10px; cursor: pointer; font-size: 1rem; font-weight: 700; }
+
+  /* ===== GAME SETUP ===== */
+  #setup-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: calc(100vh - 60px);
+    gap: 24px; padding: 40px;
+  }
+  #setup-screen h2 { font-size: 2rem; font-weight: 900; color: var(--accent); }
+  #setup-screen p { color: var(--text2); max-width: 480px; text-align: center; line-height: 1.6; }
+  .mode-cards { display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; }
+  .mode-card {
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: 16px; padding: 28px; width: 220px;
+    cursor: pointer; transition: all 0.2s; text-align: center;
+  }
+  .mode-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 8px 24px rgba(245,158,11,0.2); }
+  .mode-card .icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .mode-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+  .mode-card p { font-size: 0.8rem; color: var(--text2); }
+  .diff-group { display: flex; gap: 10px; }
+  .diff-btn {
+    padding: 8px 20px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); cursor: pointer; transition: all 0.2s;
+    font-size: 0.85rem; font-weight: 600;
+  }
+  .diff-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .diff-btn.selected { background: var(--accent); color: #000; border-color: var(--accent); }
+  .setup-label { color: var(--text2); font-size: 0.85rem; margin-bottom: 8px; }
+  .btn-start {
+    background: var(--accent); color: #000;
+    padding: 14px 48px; border: none; border-radius: 12px;
+    font-size: 1.1rem; font-weight: 900; cursor: pointer;
+    transition: all 0.2s; margin-top: 8px;
+  }
+  .btn-start:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(245,158,11,0.4); }
+
+  /* ===== LAN SETUP ===== */
+  #lan-setup {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 16px; padding: 28px; max-width: 420px; width: 100%;
+  }
+  #lan-setup h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; color: var(--accent); }
+  .input-group { display: flex; gap: 10px; margin-bottom: 12px; }
+  .text-input {
+    flex: 1; padding: 10px 14px; border-radius: 8px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-size: 0.9rem;
+  }
+  .text-input:focus { outline: none; border-color: var(--accent); }
+  .lan-or { text-align: center; color: var(--text2); margin: 16px 0; font-size: 0.85rem; }
+  .room-code-display {
+    font-size: 2rem; font-weight: 900; letter-spacing: 6px;
+    color: var(--accent); text-align: center; padding: 16px;
+    background: var(--surface2); border-radius: 10px; margin: 10px 0;
+    font-family: monospace;
+  }
+  .lan-status { font-size: 0.82rem; color: var(--text2); text-align: center; }
+  .lan-status.connected { color: var(--green); }
+  .lan-status.error { color: var(--red); }
+
+  /* ===== LOG ===== */
+  #log-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  #log-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+  #log-header span { font-size: 0.85rem; font-weight: 600; color: var(--text2); }
+  #log-entries {
+    max-height: 160px; overflow-y: auto;
+    padding: 10px 16px;
+    display: none;
+  }
+  #log-entries.open { display: block; }
+  .log-entry { font-size: 0.78rem; color: var(--text2); padding: 3px 0; border-bottom: 1px solid rgba(48,54,61,0.5); }
+  .log-entry .log-time { color: var(--text3); margin-right: 8px; }
+  .log-entry.win-log { color: var(--green); }
+  .log-entry.lose-log { color: var(--red); }
+
+  /* ===== TERMINAL MODE ===== */
+  #terminal-mode {
+    display: none;
+    background: #000; color: #00ff00;
+    font-family: 'Courier New', monospace;
+    min-height: calc(100vh - 60px);
+    padding: 20px;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  #terminal-mode.show { display: block; }
+  #game-area.hide { display: none; }
+  #scoreboard.hide { display: none; }
+  .term-line { margin-bottom: 2px; }
+  .term-head { color: #ffff00; font-weight: bold; }
+  .term-sep { color: #333; }
+  .term-input-row { display: flex; gap: 0; align-items: center; margin-top: 12px; }
+  .term-prompt { color: #00ff00; white-space: nowrap; }
+  #term-input {
+    flex: 1; background: transparent; border: none; color: #00ff00;
+    font-family: 'Courier New', monospace; font-size: 0.85rem;
+    outline: none; caret-color: #00ff00;
+  }
+  .term-output { max-height: 60vh; overflow-y: auto; }
+
+  /* ===== AI THINKING ===== */
+  #ai-thinking {
+    display: none; text-align: center; padding: 10px;
+    color: var(--text2); font-size: 0.85rem;
+  }
+  #ai-thinking.show { display: block; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  /* ===== ANIMATIONS ===== */
+  @keyframes pulse { 50% { opacity: 0.7; } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.3s ease-out; }
+  @keyframes timerPulse {
+    0%, 100% { color: var(--red); }
+    50% { color: var(--accent); }
+  }
+  .timer-urgent { animation: timerPulse 0.8s infinite; }
+  @keyframes fireworkBurst {
+    0%   { opacity:1; transform:translateY(0) scale(1); }
+    100% { opacity:0; transform:translateY(-200px) scale(0.2); }
+  }
+
+  /* ===== TUTORIAL ===== */
+  .tutorial-emoji { font-size: 2.5rem; text-align: center; display: block; margin-bottom: 12px; }
+  .tutorial-rule { background: var(--surface2); border-radius: 8px; padding: 8px 12px; margin: 6px 0; font-size: 0.82rem; border-left: 3px solid var(--accent); }
+  #tutorial-dots { display: flex; gap: 6px; }
+  #tutorial-dots .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: all 0.2s; }
+  #tutorial-dots .dot.active { background: var(--accent); width: 20px; border-radius: 4px; }
+
+  /* ===== SHARE CARD ===== */
+  .share-toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--green); color: #000; padding: 10px 24px;
+    border-radius: 20px; font-weight: 700; font-size: 0.85rem;
+    z-index: 400; animation: fadeIn 0.3s ease-out;
+    pointer-events: none;
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 600px) {
+    #header { padding: 10px 14px; }
+    #header h1 { font-size: 1rem; }
+    #game-area { padding: 10px; gap: 10px; }
+    .die { width: 44px; height: 44px; font-size: 1.2rem; }
+    .btn-action { padding: 8px 10px; font-size: 0.72rem; min-width: auto; border-radius: 8px; }
+    #action-bar { gap: 6px; padding: 10px; flex-wrap: wrap; }
+    #action-bar .btn-action { flex: 0 1 auto; }
+    #bid-text { font-size: 1.1rem; }
+    #result-box { padding: 20px 16px; }
+    #result-title { font-size: 1.4rem; }
+    #current-bid { padding: 10px 14px; }
+    .player-panel { padding: 12px; }
+    #scoreboard { padding: 8px 12px; font-size: 0.75rem; flex-wrap: wrap; gap: 8px; }
+    #modal-box { min-width: auto; max-width: 95vw; padding: 20px; }
+    .sel-btn { width: 34px; height: 34px; font-size: 0.85rem; }
+    .mode-card { width: 160px; padding: 20px; }
+    #header-right { gap: 4px; }
+    #header-right .btn-sm { padding: 4px 8px; font-size: 0.7rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <h1>🎲 吹牛5骰</h1>
+  <div id="header-right">
+    <span id="mode-label" style="font-size:0.8rem;color:var(--text2)"></span>
+    <button class="btn-sm" id="btn-tutorial" title="游戏规则">❓</button>
+    <button class="btn-sm" id="btn-sound-toggle" title="音效开关">🔊</button>
+    <button class="btn-sm" id="btn-terminal">📟 终端模式</button>
+    <button class="btn-sm" id="btn-reset-game" style="display:none">重置</button>
+    <button class="btn-sm" id="btn-back-setup">返回主菜单</button>
+  </div>
+</div>
+
+<!-- SCOREBOARD -->
+<div id="scoreboard">
+  <div class="score-item">
+    <span class="score-label">你</span>
+    <span class="score-val" id="p-score" style="color:var(--accent)">0 🍺</span>
+  </div>
+  <span class="score-sep">:</span>
+  <div class="score-item">
+    <span class="score-label" id="opp-name-score">对手</span>
+    <span class="score-val" id="a-score" style="color:var(--blue)">0 🍺</span>
+  </div>
+  <div style="flex:1"></div>
+  <div id="mult-display" class="multiplier-badge mult-1">×1 基础</div>
+  <div id="zhai-display" class="zhai-badge" style="display:none">斋</div>
+  <div id="straight-display" class="zhai-badge" style="display:none;background:var(--red);">顺子归零</div>
+  <div id="double-display" class="multiplier-badge mult-2" style="display:none;">双倍</div>
+  <div id="speed-display" class="zhai-badge" style="display:none;background:var(--blue);">⚡极速</div>
+  <div id="target-display" class="zhai-badge" style="display:none;background:var(--green);">🎯</div>
+  <div style="flex:1"></div>
+  <div style="display:flex;gap:12px;font-size:0.78rem;color:var(--text2);align-items:center;flex-wrap:wrap;">
+    <span>局数 <b id="total-val" style="color:var(--text)">0</b></span>
+    <span style="color:var(--green)">胜 <b id="wins-val" style="color:var(--green)">0</b></span>
+    <span style="color:var(--red)">负 <b id="losses-val" style="color:var(--red)">0</b></span>
+    <span>连胜 <b id="streak-val" style="color:var(--accent)">0</b></span>
+    <span>连败 <b id="lstreak-val" style="color:var(--red)">0</b></span>
+  </div>
+</div>
+
+<!-- SETUP SCREEN -->
+<div id="setup-screen">
+  <h2>🎲 吹牛5骰</h2>
+  <p>经典双人吹牛骰子游戏 · 5骰双方 · 叫骰开牌 · 万能1点</p>
+  <pre id="error-log" style="display:none;color:red;font-size:0.7rem;max-width:600px;white-space:pre-wrap;background:#100;padding:8px;border-radius:6px;"></pre>
+  <div class="mode-cards">
+    <div class="mode-card" id="card-ai">
+      <div class="icon">🤖</div>
+      <h3>单机 AI 对战</h3>
+      <p>挑战智能 AI，三档难度，随时可玩</p>
+    </div>
+    <div class="mode-card" id="card-lan">
+      <div class="icon">🌐</div>
+      <h3>局域网联机</h3>
+      <p>同网双人实时对局，创建或加入房间</p>
+    </div>
+  </div>
+  <div id="ai-setup" style="display:none; text-align:center;">
+    <div class="setup-label">选择 AI 难度</div>
+    <div class="diff-group">
+      <button class="diff-btn selected" data-diff="easy">🌱 新手</button>
+      <button class="diff-btn" data-diff="normal">⚔️ 普通</button>
+      <button class="diff-btn" data-diff="hard">💀 高手</button>
+    </div>
+    <br>
+    <div class="setup-label" style="margin-top:12px;">回合时限</div>
+    <div class="diff-group" id="timeout-group-ai">
+      <button class="diff-btn selected" data-sec="30">⏱ 30秒</button>
+      <button class="diff-btn" data-sec="60">⏱ 60秒</button>
+      <button class="diff-btn" data-sec="90">⏱ 90秒</button>
+    </div>
+    <br>
+    <div class="setup-label" style="margin-top:12px;">游戏模式</div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn-sm" id="btn-speed-mode">⚡ 极速10秒</button>
+      <button class="btn-sm" id="btn-score-3">🎯 3分赛</button>
+      <button class="btn-sm" id="btn-score-5">🎯 5分赛</button>
+      <button class="btn-sm" id="btn-score-7">🎯 7分赛</button>
+      <button class="btn-sm" id="btn-no-limit-open">🔓 无限制强开</button>
+    </div>
+    <br>
+    <button class="btn-start" id="btn-start-ai">开始对局</button>
+  </div>
+  <div id="lan-setup" style="display:none;">
+    <h3>局域网联机</h3>
+    <!-- 昵称和皮肤 -->
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input class="text-input" id="nickname-input" placeholder="你的昵称" maxlength="12" style="flex:2;">
+      <select id="skin-select" style="flex:1;padding:8px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);">
+        <option value="default">🎲 经典</option>
+        <option value="gold">✨ 黄金</option>
+        <option value="neon">💜 霓虹</option>
+        <option value="ocean">🌊 海洋</option>
+        <option value="ruby">❤️ 红宝石</option>
+        <option value="forest">🌿 森林</option>
+      </select>
+    </div>
+    <!-- 回合时限 -->
+    <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+      <span style="color:var(--text2);font-size:0.82rem;">回合时限:</span>
+      <div class="diff-group" id="timeout-group-lan">
+        <button class="diff-btn selected" data-sec="30">30秒</button>
+        <button class="diff-btn" data-sec="60">60秒</button>
+        <button class="diff-btn" data-sec="90">90秒</button>
+      </div>
+    </div>
+    <div style="margin-bottom:12px">
+      <button class="btn-sm" id="btn-create-room" style="width:100%;padding:12px;font-size:0.9rem;">创建房间</button>
+    </div>
+    <div id="room-created" style="display:none;">
+      <div class="setup-label">你的房间码（告知对方）</div>
+      <div class="room-code-display" id="room-code-show"></div>
+      <div class="lan-status" id="lan-countdown" style="color:var(--accent);font-weight:600"></div>
+      <div class="lan-status" id="lan-wait-status">⏳ 等待对方加入...</div>
+    </div>
+    <div class="lan-or">— 或者 —</div>
+    <div class="input-group">
+      <input class="text-input" id="join-code-input" placeholder="输入房间码" maxlength="6">
+      <button class="btn-sm" id="btn-join-room">加入</button>
+    </div>
+    <div class="lan-status" id="lan-join-status"></div>
+  </div>
+</div>
+
+<!-- GAME AREA -->
+<div id="game-area" style="display:none;">
+
+  <!-- OPPONENT -->
+  <div class="player-panel opponent fade-in" id="opponent-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span id="opp-panel-name">对手</span>
+        <span class="role-badge ai-badge" id="opp-role-badge">AI</span>
+      </div>
+      <span class="lock-badge">🔒 骰子已锁定</span>
+    </div>
+    <div class="dice-row" id="opp-dice-row"></div>
+    <div class="last-action" id="opp-last-action">-</div>
+  </div>
+
+  <!-- CURRENT BID -->
+  <div id="current-bid">
+    <div id="bid-text">— 尚未叫分 —</div>
+    <div id="bid-sub">等待第一手叫分</div>
+    <div id="bid-who"></div>
+  </div>
+
+  <!-- AI THINKING -->
+  <div id="ai-thinking">🤔 AI 正在思考...</div>
+
+  <!-- TURN TIMER -->
+  <div id="turn-timer" style="display:none; text-align:center; padding:10px 20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); font-weight:700;">
+    ⏱ 剩余 <span id="timer-seconds" style="font-size:1.4rem; color:var(--accent)">30</span> 秒
+  </div>
+
+  <!-- ACTION BAR -->
+  <div id="action-bar">
+    <button class="btn-action btn-call" id="btn-call">📢 叫骰</button>
+    <button class="btn-action btn-open" id="btn-open">‼️ 开！</button>
+    <button class="btn-action btn-pi" id="btn-pi">✂️ 劈！</button>
+    <button class="btn-action btn-fanpi" id="btn-fanpi">🔄 反劈</button>
+    <button class="btn-action btn-zhai" id="btn-zhai">🚫 斋</button>
+    <button class="btn-action btn-exact" id="btn-exact" style="background:var(--green);color:#fff;">🎯 精准</button>
+    <button class="btn-action btn-skill" id="btn-skill" style="background:var(--purple);color:#fff;">⚡ 技能</button>
+    <button class="btn-action btn-next" id="btn-next" style="display:none">🔄 下一局</button>
+  </div>
+
+  <!-- PLAYER -->
+  <div class="player-panel self fade-in" id="player-panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <span>你</span>
+        <span class="role-badge you-badge">YOU</span>
+      </div>
+      <span class="lock-badge">🔒 骰子已锁定</span>
+    </div>
+    <div class="dice-row" id="player-dice-row"></div>
+    <div class="last-action" id="player-last-action">-</div>
+  </div>
+
+  <!-- LOG -->
+  <div id="log-panel">
+    <div id="log-header">
+      <span>📋 对局日志</span>
+      <span id="log-toggle-icon">▶</span>
+    </div>
+    <div id="log-entries"></div>
+  </div>
+
+</div>
+
+<!-- TERMINAL MODE -->
+<div id="terminal-mode">
+  <div class="term-line term-head">====== 吹牛5骰 终端模式 ======</div>
+  <div class="term-output" id="term-output"></div>
+  <div class="term-input-row">
+    <span class="term-prompt">&gt; </span>
+    <input type="text" id="term-input" placeholder="输入指令: call X Y | open | pi | fanpi | zhai | help" autocomplete="off">
+  </div>
+</div>
+
+<!-- BID MODAL -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <h2>📢 叫骰</h2>
+    <div class="modal-row">
+      <span class="modal-label">数量</span>
+      <div class="selector-group" id="qty-selector"></div>
+    </div>
+    <div class="modal-row">
+      <span class="modal-label">点数</span>
+      <div class="selector-group" id="pip-selector"></div>
+    </div>
+    <div class="modal-row" style="justify-content:flex-start;gap:16px;">
+      <label style="color:var(--text2);font-size:0.85rem;cursor:pointer;display:flex;align-items:center;gap:4px;">
+        <input type="checkbox" id="bid-double-cb"> 双倍（×2惩罚）
+      </label>
+    </div>
+    <div class="modal-error" id="bid-error"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="bid-cancel">取消</button>
+      <button class="btn-confirm" id="bid-confirm">✅ 确认叫分</button>
+    </div>
+  </div>
+</div>
+
+<!-- SKILL MODAL -->
+<div id="skill-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:250;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 32px;min-width:360px;max-width:440px;box-shadow:var(--shadow);">
+    <h2 style="color:var(--purple);margin-bottom:16px;">⚡ 选择技能（本局限1次）</h2>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="skill-opt" data-skill="peek" style="padding:12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;text-align:left;">
+        👁 <b>窥骰</b> — 偷看对方1颗随机骰子
+      </button>
+      <button class="skill-opt" data-skill="block" style="padding:12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;text-align:left;">
+        🔒 <b>封锁</b> — 强制斋模式，1永久失效，不可飞
+      </button>
+      <button class="skill-opt" data-skill="rewind" style="padding:12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;text-align:left;">
+        ⏪ <b>回溯</b> — 撤销上家最后一次叫分
+      </button>
+      <button class="skill-opt" data-skill="doublePenalty" style="padding:12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);color:var(--text);cursor:pointer;text-align:left;">
+        💥 <b>加倍惩罚</b> — 下次开牌对方损失翻倍
+      </button>
+    </div>
+    <div style="margin-top:12px;text-align:right;">
+      <button id="skill-cancel" style="background:var(--surface2);color:var(--text);padding:8px 20px;border:1px solid var(--border);border-radius:8px;cursor:pointer;">取消</button>
+    </div>
+  </div>
+</div>
+
+<!-- TUTORIAL MODAL -->
+<div id="tutorial-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:350;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px 36px;max-width:500px;width:90%;box-shadow:var(--shadow);max-height:85vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <h2 id="tutorial-title" style="font-size:1.2rem;color:var(--accent);margin:0;">🎲 游戏规则</h2>
+      <span id="tutorial-step" style="color:var(--text2);font-size:0.8rem;">1/6</span>
+    </div>
+    <div id="tutorial-content" style="color:var(--text);font-size:0.9rem;line-height:1.8;min-height:180px;"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;">
+      <button id="tutorial-prev" class="btn-sm" style="visibility:hidden;">◀ 上一步</button>
+      <div style="display:flex;gap:6px;" id="tutorial-dots"></div>
+      <button id="tutorial-next" class="btn-sm" style="background:var(--accent);color:#000;border-color:var(--accent);">下一步 ▶</button>
+    </div>
+    <div style="text-align:center;margin-top:12px;">
+      <button id="tutorial-skip" style="background:none;border:none;color:var(--text2);cursor:pointer;font-size:0.8rem;text-decoration:underline;">跳过教程</button>
+    </div>
+  </div>
+</div>
+
+<!-- RESULT MODAL -->
+<div id="result-overlay">
+  <div id="result-box">
+    <div id="result-title"></div>
+    <div id="result-summary"></div>
+    <div id="result-dice-display"></div>
+    <div id="result-detail"></div>
+    <div id="result-mult"></div>
+    <button id="result-next">🔄 下一局</button>
+    <button id="result-share" style="background:var(--blue);color:#fff;padding:10px 24px;border:none;border-radius:10px;cursor:pointer;font-size:0.9rem;font-weight:700;margin-left:8px;">📋 分享战绩</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// MODULE 1: CRYPTO / ANTI-CHEAT LOCK
+// ============================================================
+const AntiCheat = {
+  // Simple hash using djb2 algorithm
+  hash(arr) {
+    let h = 5381;
+    for (const v of arr) {
+      h = ((h << 5) + h) ^ v;
+      h = h & h;
+    }
+    return (h >>> 0).toString(16).padStart(8, '0');
+  },
+  lock(dice) {
+    return { dice: [...dice], hash: this.hash(dice) };
+  },
+  verify(locked) {
+    return this.hash(locked.dice) === locked.hash;
+  }
+};
+
+// ============================================================
+// MODULE 2: DICE RENDERER
+// ============================================================
+const DiceRenderer = {
+  DOT_POSITIONS: {
+    1: [[1,1]],
+    2: [[0,0],[2,2]],
+    3: [[0,0],[1,1],[2,2]],
+    4: [[0,0],[0,2],[2,0],[2,2]],
+    5: [[0,0],[0,2],[1,1],[2,0],[2,2]],
+    6: [[0,0],[0,1],[0,2],[2,0],[2,1],[2,2]]
+  },
+
+  createDie(value, type, isWild=false) {
+    const die = document.createElement('div');
+    die.className = `die ${type}-die${isWild ? ' wild' : ''}`;
+    if (value === null) {
+      die.innerHTML = '<span class="die-cover">🀫</span>';
+      die.classList.add('hidden');
+    } else {
+      // Build pip grid
+      die.classList.add('pip-die');
+      const grid = Array(9).fill(null).map(() => {
+        const p = document.createElement('div');
+        p.className = 'pip empty';
+        return p;
+      });
+      const positions = this.DOT_POSITIONS[value] || [];
+      for (const [r,c] of positions) {
+        grid[r*3+c].className = 'pip';
+      }
+      grid.forEach(p => die.appendChild(p));
+    }
+    die.dataset.value = value;
+    return die;
+  },
+
+  renderRow(containerId, dice, type, reveal=true, wildActive=true) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    for (const v of dice) {
+      const show = reveal ? v : null;
+      const isWild = wildActive && v === 1 && reveal;
+      const die = this.createDie(show, type, isWild);
+      container.appendChild(die);
+    }
+  },
+
+  animateRoll(containerId, finalDice, type, callback) {
+    const container = document.getElementById(containerId);
+    const els = container.querySelectorAll('.die');
+    let count = 0;
+    const total = finalDice.length;
+    els.forEach((el, i) => {
+      el.classList.add('rolling');
+      setTimeout(() => {
+        el.classList.remove('rolling');
+        count++;
+        if (count === total && callback) callback();
+      }, 500 + i * 80);
+    });
+  }
+};
+
+// ============================================================
+// MODULE 3: RULE VALIDATOR
+// ============================================================
+const Rules = {
+  // Count dice including wilds (1s if not zhai)
+  countDice(allDice, targetPip, isZhai) {
+    let count = 0;
+    for (const v of allDice) {
+      if (v === targetPip) count++;
+      else if (!isZhai && v === 1 && targetPip !== 1) count++;
+    }
+    return count;
+  },
+
+  // Check for straight (顺子 12345 or 23456) — dice count as 0
+  isStraight(dice) {
+    if (!dice || dice.length < 5) return false;
+    const sorted = [...dice].sort((a,b) => a-b);
+    return (sorted[0]===1 && sorted[1]===2 && sorted[2]===3 && sorted[3]===4 && sorted[4]===5) ||
+           (sorted[0]===2 && sorted[1]===3 && sorted[2]===4 && sorted[3]===5 && sorted[4]===6);
+  },
+
+  // Get effective dice (filter out straight-zero dice)
+  effectiveDice(dice, straightFlag) {
+    return straightFlag ? [] : dice;
+  },
+
+  // Is newBid valid given currentBid?
+  // Supports: normal, double (双倍), zhai (斋), fei (飞/破斋)
+  isValidBid(newQty, newPip, currentQty, currentPip, isZhai, isDouble) {
+    if (currentQty === 0) return true; // first bid, anything goes
+    // 双倍叫分：比较时用实际目标数量(×2)
+    const effNewQty = isDouble ? newQty * 2 : newQty;
+    if (effNewQty > currentQty) return true;
+    if (effNewQty === currentQty && newPip > currentPip) return true;
+    return false;
+  },
+
+  // Check if a bid can "fly" (飞/破斋): must be double quantity + same pip
+  canFei(newQty, newPip, currentQty, currentPip, isZhai) {
+    if (!isZhai) return false; // only meaningful when zhai is active
+    if (newPip !== currentPip) return false;
+    return newQty >= currentQty * 2;
+  },
+
+  // Determine winner after open
+  // Returns {total, needed, pip, loser, isExact}
+  resolveOpen(playerDice, opponentDice, bidQty, bidPip, isZhai, playerStraight, opponentStraight) {
+    const pDice = playerStraight ? [] : playerDice;
+    const oDice = opponentStraight ? [] : opponentDice;
+    const all = [...pDice, ...oDice];
+    const total = this.countDice(all, bidPip, isZhai);
+    const loser = total >= bidQty ? 'opener' : 'bidder';
+    return { total, needed: bidQty, pip: bidPip, loser, effectiveCount: all.length };
+  },
+
+  // 精准猜
+  resolveExact(playerDice, opponentDice, bidQty, bidPip, isZhai, playerStraight, opponentStraight) {
+    const pDice = playerStraight ? [] : playerDice;
+    const oDice = opponentStraight ? [] : opponentDice;
+    const all = [...pDice, ...oDice];
+    const total = this.countDice(all, bidPip, isZhai);
+    return { exact: total === bidQty, total, pip: bidPip, guessed: bidQty };
+  },
+
+  // 天牌/豹子检测
+  isBomb(dice) {
+    if (!dice || dice.length < 5) return false;
+    const allSame = dice.every(v => v === dice[0]);
+    if (!allSame) return false;
+    return dice[0] === 1 ? 'sky' : 'normal'; // sky=天牌(5个1), normal=豹子
+  },
+
+  // 天牌加成后的叫分下限
+  bombCallBase(qty, pip, bombType) {
+    if (!bombType) return qty;
+    const bonus = bombType === 'sky' ? 3 : 2;
+    return qty + bonus; // 天牌可叫更高基数
+  }
+};
+
+// ============================================================
+// MODULE 4: AI DECISION ENGINE
+// ============================================================
+const AI = {
+  difficulty: 'normal',
+
+  decide(aiDice, currentQty, currentPip, isZhai, totalDice=10) {
+    const diff = this.difficulty;
+    const pip = currentPip || 0;
+    const qty = currentQty || 0;
+
+    // AI 被劈后是否反劈？概率随难度递增
+    if (qty > 0 && GameState.hasPi && !GameState.hasFanPi && GameState.piBy === 'player') {
+      const fanpiChance = diff === 'easy' ? 0.05 : diff === 'normal' ? 0.3 : 0.55;
+      if (Math.random() < fanpiChance) {
+        return { action: 'fanpi' };
+      }
+      // 不反劈则继续叫/开，倍率保持 ×2
+    }
+
+    // Estimate total count of any pip
+    const estimate = (targetPip) => {
+      let count = 0;
+      for (const v of aiDice) {
+        if (v === targetPip) count++;
+        else if (!isZhai && v === 1 && targetPip !== 1) count++;
+      }
+      // Estimate opponent has ~10/6 per pip
+      const oppEstimate = isZhai ? (totalDice-5)/6 : (targetPip === 1 ? (totalDice-5)/6 : (totalDice-5)/6 + (totalDice-5)/6*0.5);
+      return count + Math.round(oppEstimate * (diff === 'hard' ? 0.9 : diff === 'normal' ? 0.8 : 0.6));
+    };
+
+    // Bluff probability
+    const bluffChance = diff === 'easy' ? 0.1 : diff === 'normal' ? 0.3 : 0.55;
+    const shouldBluff = Math.random() < bluffChance;
+
+    // Should open? (被劈后开牌更谨慎)
+    const shouldOpen = () => {
+      if (qty === 0) return false;
+      const estTotal = estimate(pip);
+      const deficit = qty - estTotal;
+      if (diff === 'easy') return deficit > 1;
+      if (diff === 'normal') return deficit > 2;
+      return deficit > 3; // hard: endure more
+    };
+
+    if (qty > 0 && shouldOpen()) {
+      return { action: 'open' };
+    }
+
+    // Try to make a valid bid
+    const candidates = [];
+    for (let p = 1; p <= 6; p++) {
+      for (let q = 2; q <= 10; q++) {
+        if (Rules.isValidBid(q, p, qty, pip)) {
+          const est = estimate(p);
+          const score = est - q + (shouldBluff ? Math.random()*3 : 0);
+          candidates.push({ qty: q, pip: p, score, est });
+        }
+      }
+    }
+    candidates.sort((a,b) => b.score - a.score);
+
+    if (candidates.length === 0) return { action: 'open' };
+
+    // Hard AI: sometimes pi (only when multiplier is 1, i.e. no pi yet)
+    if (diff === 'hard' && Math.random() < 0.25 && qty > 0 && GameState.multiplier === 1) {
+      return { action: 'pi' };
+    }
+
+    // Pick best candidate (with some randomness for lower difficulties)
+    const pick = diff === 'easy'
+      ? candidates[Math.min(Math.floor(Math.random() * 4), candidates.length-1)]
+      : diff === 'normal'
+        ? candidates[Math.min(Math.floor(Math.random() * 2), candidates.length-1)]
+        : candidates[0];
+
+    return { action: 'call', qty: pick.qty, pip: pick.pip };
+  }
+};
+
+// ============================================================
+// MODULE 5: GAME STATE
+// ============================================================
+const GameState = {
+  mode: null, // 'ai' | 'lan'
+  myPlayerId: '',
+  mySkin: 'default',
+  players: [],      // [{id, nickname, skin}]
+  _savedPlayerId: '', // CREATE/JOIN 回包到 GAME_START 之间的桥接
+  phase: 'setup', // 'setup' | 'rolling' | 'playing' | 'ended'
+  playerDice: [],
+  opponentDice: [],
+  playerLock: null,
+  opponentLock: null,
+  currentBidQty: 0,
+  currentBidPip: 0,
+  bidder: null, // 'player' | 'opponent'
+  turn: 'player', // whose turn to act
+  multiplier: 1,
+  isZhai: false,
+  hasPi: false,
+  hasFanPi: false,
+  piBy: null,          // 'player' | 'opponent' | null — 谁劈的，只有被劈方才能反劈
+  isDouble: false,     // 当前叫分是否为双倍叫分
+  zhaiLocked: false,   // 封锁技能：斋被锁定，不可切换/不可飞
+  playerStraight: false,   // 玩家骰子顺子归零
+  opponentStraight: false, // 对手骰子顺子归零
+  playerBomb: null,        // 玩家天牌类型 'sky'|'normal'|null
+  opponentBomb: null,      // 对手天牌类型
+  playerSkillUsed: false,  // 玩家本局技能已使用
+  opponentSkillUsed: false,// 对手本局技能已使用
+  lastBidder: null,    // 上一手叫分方（供回溯技能用）
+  lastBidQty: 0,       // 上一手数量
+  lastBidPip: 0,       // 上一手点数
+  pendingOpen: false,  // LAN 模式防止双方同时开牌的竞态锁
+  turnTimer: null,     // 回合倒计时 setInterval ID
+  turnTimeLeft: 0,     // 回合剩余秒数
+  TURN_TIMEOUT: 30,    // 每回合时限（秒）
+  timeoutLoss: false,  // 本局是否因超时判负
+  timeoutWin: false,   // 本局是否因对手超时获胜
+  _resultTimer: null,  // showResult 的 setTimeout ID
+  _lastBeginRound: 0,  // 上次 beginRound 时间戳（防重复）
+  _settledRound: 0,    // 已结算的局号（防止 TIMEOUT/NEXT_ROUND 竞态重复结算）
+  playerScore: 0,
+  opponentScore: 0,
+  totalGames: 0,        // 总对局数
+  wins: 0,              // 胜利局数
+  losses: 0,            // 失败局数
+  streak: 0,
+  opponentStreak: 0,  // 对手连胜（即本地玩家连败）次数
+  maxStreak: 0,       // 历史最高连胜
+  maxLStreak: 0,      // 历史最高连败
+  logs: [],
+  aiDiff: 'normal',
+  roundNum: 0,
+  diceSynced: false,  // LAN 模式骰子同步标志
+  lastRoundLoser: false,  // 上一局本地玩家是否输了（输家下局先叫）
+  pendingOpponentDice: null,  // 缓存对方提前发来的下一局骰子
+
+  reset() {
+    this.playerDice = [];
+    this.opponentDice = [];
+    this.playerLock = null;
+    this.opponentLock = null;
+    this.currentBidQty = 0;
+    this.currentBidPip = 0;
+    this.bidder = null;
+    this.turn = 'player';
+    this.multiplier = 1;
+    this.isZhai = false;
+    this.hasPi = false;
+    this.hasFanPi = false;
+    this.piBy = null;
+    this.isDouble = false;
+    this.zhaiLocked = false;
+    this.playerStraight = false;
+    this.opponentStraight = false;
+    this.playerBomb = null;
+    this.opponentBomb = null;
+    this.playerSkillUsed = false;
+    this.opponentSkillUsed = false;
+    this.lastBidder = null;
+    this.lastBidQty = 0;
+    this.lastBidPip = 0;
+    this.pendingOpen = false;
+    Game.stopTurnTimer();
+    this.timeoutLoss = false;
+    this.timeoutWin = false;
+    if (this._resultTimer) { clearTimeout(this._resultTimer); this._resultTimer = null; }
+    this.diceSynced = false;
+    this.roundNum++;
+  },
+
+  rollDice() {
+    const roll = () => Array.from({length:5}, () => Math.ceil(Math.random()*6));
+    this.playerDice = roll();
+    this.opponentDice = roll();
+    // 顺子归零 + 天牌检测
+    this.playerStraight = Rules.isStraight(this.playerDice);
+    this.opponentStraight = Rules.isStraight(this.opponentDice);
+    this.playerBomb = this.playerStraight ? null : Rules.isBomb(this.playerDice);
+    this.opponentBomb = this.opponentStraight ? null : Rules.isBomb(this.opponentDice);
+    this.playerLock = AntiCheat.lock(this.playerDice);
+    this.opponentLock = AntiCheat.lock(this.opponentDice);
+    return AntiCheat.verify(this.playerLock) && AntiCheat.verify(this.opponentLock);
+  },
+
+  addLog(msg, cls='') {
+    const time = new Date().toLocaleTimeString('zh', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    this.logs.unshift({time, msg, cls});
+    UI.renderLog();
+  }
+};
+
+// ============================================================
+// MODULE 6: LAN COMMUNICATION — WebSocket 真实局域网联机
+// ============================================================
+const LAN = {
+  ws: null,
+  isHost: false,
+  roomCode: null,
+  connected: false,
+  callbacks: {},
+
+  _wsUrl() {
+    const loc = window.location;
+    const proto = loc.protocol === 'https:' ? 'wss' : 'ws';
+    return `${proto}://${loc.host}`;
+  },
+
+  _connect() {
+    return new Promise((resolve, reject) => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) { resolve(); return; }
+      let url;
+      try { url = this._wsUrl(); this.ws = new WebSocket(url); }
+      catch(e) { reject('无法连接到服务器，请确认已运行 server.js'); return; }
+      this.ws.onopen  = () => resolve();
+      this.ws.onerror = () => reject('WebSocket 连接失败');
+      this.ws.onmessage = (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        const cb = this.callbacks[msg.type];
+        if (cb) cb(msg);
+      };
+      this.ws.onclose = () => {
+        this.connected = false;
+        const cb = this.callbacks['OPPONENT_DISCONNECTED'];
+        if (cb) cb({});
+      };
+    });
+  },
+
+  async createRoom(opts = {}) {
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    try { await this._connect(); } catch(err) { return { error: err }; }
+    this.roomCode = code;
+    this.isHost = true;
+
+    return new Promise((resolve) => {
+      const origCb = this.callbacks['CREATED'];
+      this.callbacks['CREATED'] = (data) => {
+        if (origCb) origCb(data);
+        // 保存重连令牌
+        if (data.token) {
+          try { localStorage.setItem('reconnect_token_'+data.code, JSON.stringify({token:data.token, playerId:data.playerId, code:data.code})); } catch(e) {}
+        }
+        resolve({ code, ttl: data.ttl, createdAt: data.createdAt, playerId: data.playerId, token: data.token, mode: data.mode, maxPlayers: data.maxPlayers, team: data.team });
+      };
+      this.send({ type: 'CREATE', code, mode: opts.mode || 'normal', maxPlayers: opts.maxPlayers || 2, nickname: opts.nickname, skin: opts.skin, config: opts.config || {} });
+      setTimeout(() => resolve({ code }), 5000);
+    });
+  },
+
+  async joinRoom(code, opts = {}) {
+    try { await this._connect(); } catch(err) { return { error: err }; }
+    this.roomCode = code;
+    this.isHost = false;
+
+    return new Promise((resolve) => {
+      const origCb = this.callbacks['JOINED'];
+      this.callbacks['JOINED'] = (data) => {
+        if (origCb) origCb(data);
+        if (data.token) {
+          try { localStorage.setItem('reconnect_token_'+code, JSON.stringify({token:data.token, playerId:data.playerId, code:code})); } catch(e) {}
+        }
+        resolve({ ok: true, ...data });
+      };
+      this.send({ type: 'JOIN', code, nickname: opts.nickname, skin: opts.skin, team: opts.team });
+      setTimeout(() => resolve({ ok: true }), 5000);
+    });
+  },
+
+  // 断线重连
+  async reconnect(code) {
+    let tokenData;
+    try { tokenData = JSON.parse(localStorage.getItem('reconnect_token_'+code)); } catch(e) {}
+    if (!tokenData || !tokenData.token) return { error: '无重连令牌' };
+
+    try { await this._connect(); } catch(err) { return { error: err }; }
+    this.roomCode = code;
+
+    return new Promise((resolve) => {
+      const origCb = this.callbacks['RECONNECTED'];
+      this.callbacks['RECONNECTED'] = (data) => {
+        if (origCb) origCb(data);
+        resolve({ ok: true, ...data });
+      };
+      this.send({ type: 'RECONNECT', token: tokenData.token });
+      setTimeout(() => resolve({ error: '重连超时' }), 8000);
+    });
+  },
+
+  send(data) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      data.timestamp = Date.now();
+      this.ws.send(JSON.stringify(data));
+    }
+  },
+
+  on(type, fn) { this.callbacks[type] = fn; },
+
+  disconnect() {
+    if (this.ws) { this.ws.close(); this.ws = null; }
+    this.connected = false;
+  }
+};
+
+// ============================================================
+// MODULE 7: UI CONTROLLER
+// ============================================================
+const UI = {
+  terminalMode: false,
+  logOpen: false,
+  selectedQty: 0,
+  selectedPip: 0,
+
+  init() {
+    this.bindEvents();
+  },
+
+  bindEvents() {
+    // Mode cards
+    document.getElementById('card-ai').onclick = () => {
+      document.getElementById('ai-setup').style.display = 'block';
+      document.getElementById('lan-setup').style.display = 'none';
+      document.querySelectorAll('.mode-card').forEach(c => c.style.borderColor = '');
+      document.getElementById('card-ai').style.borderColor = 'var(--accent)';
+    };
+    document.getElementById('card-lan').onclick = () => {
+      document.getElementById('lan-setup').style.display = 'block';
+      document.getElementById('ai-setup').style.display = 'none';
+      document.querySelectorAll('.mode-card').forEach(c => c.style.borderColor = '');
+      document.getElementById('card-lan').style.borderColor = 'var(--accent)';
+    };
+
+    // Difficulty
+    document.querySelectorAll('.diff-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        AI.difficulty = btn.dataset.diff;
+        GameState.aiDiff = btn.dataset.diff;
+      };
+    });
+
+    // Timeout selectors
+    document.querySelectorAll('#timeout-group-ai .diff-btn, #timeout-group-lan .diff-btn').forEach(btn => {
+      btn.onclick = function() {
+        const group = this.parentElement;
+        group.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('selected'));
+        this.classList.add('selected');
+        GameConfig.turnTimeout = parseInt(this.dataset.sec);
+        try { localStorage.setItem('liars_dice_timeout', GameConfig.turnTimeout); } catch(e) {}
+      };
+    });
+
+    // Sound toggle
+    document.getElementById('btn-sound-toggle').onclick = function() {
+      GameConfig.soundEnabled = !GameConfig.soundEnabled;
+      this.textContent = GameConfig.soundEnabled ? '🔊' : '🔇';
+      this.classList.toggle('active', !GameConfig.soundEnabled);
+      try { localStorage.setItem('liars_dice_sound', GameConfig.soundEnabled ? '1' : '0'); } catch(e) {}
+    };
+
+    // Mode toggles
+    document.getElementById('btn-speed-mode').onclick = function() {
+      GameConfig.speedMode = !GameConfig.speedMode;
+      this.classList.toggle('active', GameConfig.speedMode);
+      this.textContent = GameConfig.speedMode ? '⚡ 极速10秒 ✓' : '⚡ 极速10秒';
+    };
+    document.getElementById('btn-score-3').onclick = function() {
+      GameConfig.scoreTarget = GameConfig.scoreTarget === 3 ? 0 : 3;
+      document.querySelectorAll('#btn-score-3,#btn-score-5,#btn-score-7').forEach(b => b.classList.remove('active'));
+      if (GameConfig.scoreTarget === 3) this.classList.add('active');
+    };
+    document.getElementById('btn-score-5').onclick = function() {
+      GameConfig.scoreTarget = GameConfig.scoreTarget === 5 ? 0 : 5;
+      document.querySelectorAll('#btn-score-3,#btn-score-5,#btn-score-7').forEach(b => b.classList.remove('active'));
+      if (GameConfig.scoreTarget === 5) this.classList.add('active');
+    };
+    document.getElementById('btn-score-7').onclick = function() {
+      GameConfig.scoreTarget = GameConfig.scoreTarget === 7 ? 0 : 7;
+      document.querySelectorAll('#btn-score-3,#btn-score-5,#btn-score-7').forEach(b => b.classList.remove('active'));
+      if (GameConfig.scoreTarget === 7) this.classList.add('active');
+    };
+    document.getElementById('btn-no-limit-open').onclick = function() {
+      GameConfig.noLimitOpen = !GameConfig.noLimitOpen;
+      this.classList.toggle('active', GameConfig.noLimitOpen);
+      this.textContent = GameConfig.noLimitOpen ? '🔓 无限制强开 ✓' : '🔓 无限制强开';
+    };
+
+    // Start AI
+    document.getElementById('btn-start-ai').onclick = () => Game.startAI();
+
+    // LAN buttons
+    document.getElementById('btn-create-room').onclick = async () => {
+      const btn = document.getElementById('btn-create-room');
+      btn.disabled = true;
+      btn.textContent = '⏳ 连接服务器...';
+      const nickname = document.getElementById('nickname-input').value.trim() || '匿名玩家';
+      const skin = document.getElementById('skin-select').value;
+      const result = await LAN.createRoom({ mode: 'normal', maxPlayers: 2, nickname, skin });
+      if (result.error) {
+        btn.disabled = false;
+        btn.textContent = '创建房间';
+        const s = document.getElementById('lan-wait-status');
+        s.textContent = '❌ ' + result.error;
+        s.className = 'lan-status error';
+        document.getElementById('room-created').style.display = 'block';
+        return;
+      }
+      document.getElementById('room-created').style.display = 'block';
+      document.getElementById('room-code-show').textContent = result.code;
+
+      // 启动倒计时（基于服务器返回的 TTL）
+      let remaining = Math.floor((result.ttl || 300000) / 1000); // 默认 5 分钟
+      const countdownEl = document.getElementById('lan-countdown');
+      const countdownTimer = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(countdownTimer);
+          countdownEl.textContent = '⏰ 房间已过期';
+          countdownEl.style.color = 'var(--red)';
+          return;
+        }
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        countdownEl.textContent = `⏳ ${m}:${s.toString().padStart(2, '0')} 内等待加入`;
+      }, 1000);
+      const stopCountdown = () => clearInterval(countdownTimer);
+
+      // 服务器收到 JOIN 后广播 START 给双方
+      LAN.on('START', (data) => {
+        stopCountdown();
+        document.getElementById('lan-wait-status').textContent = '✅ 玩家已就绪！等待服务器分配回合...';
+        document.getElementById('lan-wait-status').className = 'lan-status connected';
+        LAN.connected = true;
+        // 不调用 startLAN —— 等 GAME_START 携带完整数据后再启动
+      });
+      LAN.on('GAME_START', (data) => {
+        stopCountdown();
+        document.getElementById('lan-wait-status').textContent = '✅ 游戏开始！';
+        document.getElementById('lan-wait-status').className = 'lan-status connected';
+        LAN.connected = true;
+        // data 包含 playerId, players
+        GameState._savedPlayerId = result.playerId;
+        setTimeout(() => Game.startLAN(true, data), 800);
+      });
+      LAN.on('PLAYER_JOINED', (data) => {
+        const s = document.getElementById('lan-wait-status');
+        const count = data.playerCount || 0;
+        const max = result.maxPlayers || 2;
+        s.textContent = `⏳ ${count}/${max} 人已加入...`;
+        const countdownEl = document.getElementById('lan-countdown');
+        if (count >= max) {
+          stopCountdown();
+          countdownEl.textContent = '✅ 满员，即将开始！';
+          countdownEl.style.color = 'var(--green)';
+        }
+      });
+      LAN.on('ERROR', (data) => {
+        stopCountdown();
+        const msgs = {
+          ROOM_TIMEOUT: '房间等待超时（5分钟），已关闭',
+          ROOM_IDLE: '房间长时间无活动，已关闭',
+          SERVER_FULL: '服务器繁忙，请稍后重试'
+        };
+        document.getElementById('lan-wait-status').textContent = '❌ ' + (msgs[data.reason] || data.message || data.reason);
+        document.getElementById('lan-wait-status').className = 'lan-status error';
+        if (data.reason === 'ROOM_TIMEOUT' || data.reason === 'ROOM_IDLE') {
+          countdownEl.textContent = '⏰ 房间已过期';
+          countdownEl.style.color = 'var(--red)';
+        }
+      });
+      LAN.on('SERVER_SHUTDOWN', (data) => {
+        stopCountdown();
+        document.getElementById('lan-wait-status').textContent = '⚠️ ' + (data.message || '服务器维护中');
+        document.getElementById('lan-wait-status').className = 'lan-status error';
+      });
+    };
+
+    document.getElementById('btn-join-room').onclick = async () => {
+      const code = document.getElementById('join-code-input').value.trim();
+      const statusEl = document.getElementById('lan-join-status');
+      if (code.length !== 6 || !/^\d{6}$/.test(code)) {
+        statusEl.textContent = '⚠️ 请输入6位数字房间码';
+        statusEl.className = 'lan-status error';
+        return;
+      }
+      statusEl.textContent = '⏳ 连接服务器...';
+      statusEl.className = 'lan-status';
+      const nickname = document.getElementById('nickname-input').value.trim() || '匿名玩家';
+      const skin = document.getElementById('skin-select').value;
+      const result = await LAN.joinRoom(code, { nickname, skin });
+      if (result.error) {
+        statusEl.textContent = '❌ ' + result.error;
+        statusEl.className = 'lan-status error';
+        return;
+      }
+      statusEl.textContent = '⏳ 等待房主确认...';
+      LAN.on('START', (data) => {
+        statusEl.textContent = '✅ 已连接！等待服务器分配回合...';
+        statusEl.className = 'lan-status connected';
+        LAN.connected = true;
+        // 不调用 startLAN —— 等 GAME_START 携带完整数据后再启动
+      });
+      LAN.on('GAME_START', (data) => {
+        statusEl.textContent = '✅ 游戏开始！';
+        statusEl.className = 'lan-status connected';
+        LAN.connected = true;
+        // data 包含 playerId, players
+        GameState._savedPlayerId = result.playerId;
+        setTimeout(() => Game.startLAN(false, data), 800);
+      });
+      LAN.on('ERROR', (data) => {
+        const msgs = {
+          ROOM_NOT_FOUND: '房间不存在',
+          ROOM_FULL: '房间已满',
+          ROOM_TIMEOUT: '房间等待超时，已关闭',
+          ROOM_IDLE: '房间已过期',
+          SERVER_FULL: '服务器繁忙，请稍后重试'
+        };
+        statusEl.textContent = '❌ ' + (msgs[data.reason] || data.message || data.reason);
+        statusEl.className = 'lan-status error';
+      });
+      LAN.on('SERVER_SHUTDOWN', (data) => {
+        statusEl.textContent = '⚠️ ' + (data.message || '服务器维护中');
+        statusEl.className = 'lan-status error';
+      });
+    };
+
+    // Action buttons
+    document.getElementById('btn-call').onclick = () => this.showBidModal();
+    document.getElementById('btn-open').onclick = () => Game.playerOpen();
+    document.getElementById('btn-pi').onclick = () => Game.playerPi();
+    document.getElementById('btn-fanpi').onclick = () => Game.playerFanPi();
+    document.getElementById('btn-zhai').onclick = () => Game.playerZhai();
+    document.getElementById('btn-exact').onclick = () => Game.playerExact();
+    document.getElementById('btn-skill').onclick = () => this.showSkillModal();
+    document.getElementById('btn-next').onclick = () => {
+      if (GameState.mode === 'lan') {
+        if (GameState.phase === 'playing' || GameState.phase === 'rolling') {
+          if (!confirm('确定要重新摇骰子？双方骰子将重新投掷，当前局重置。')) return;
+        }
+        Game.restartMatch();
+      } else {
+        Game.nextRound();
+      }
+    };
+    document.getElementById('result-next').onclick = () => {
+      if (GameState.mode === 'lan') Game.restartMatch();
+      else Game.nextRound();
+    };
+
+    // Modal
+    document.getElementById('bid-cancel').onclick = () => this.hideBidModal();
+    document.getElementById('bid-confirm').onclick = () => this.confirmBid();
+
+    // Share
+    document.getElementById('result-share').onclick = () => Share.copy();
+
+    // Tutorial
+    document.getElementById('btn-tutorial').onclick = () => Tutorial.show();
+    document.getElementById('tutorial-prev').onclick = () => Tutorial.prev();
+    document.getElementById('tutorial-next').onclick = () => Tutorial.next();
+    document.getElementById('tutorial-skip').onclick = () => Tutorial.hide();
+
+    // Terminal toggle
+    document.getElementById('btn-terminal').onclick = () => this.toggleTerminal();
+
+    // Back to setup
+    document.getElementById('btn-back-setup').onclick = () => {
+      location.reload();
+    };
+
+    // Reset
+    document.getElementById('btn-reset-game').onclick = () => {
+      if (confirm('清空所有比分和记录？')) {
+        GameState.playerScore = 0;
+        GameState.opponentScore = 0;
+        GameState.totalGames = 0;
+        GameState.wins = 0;
+        GameState.losses = 0;
+        GameState.streak = 0;
+        GameState.opponentStreak = 0;
+        GameState.logs = [];
+        this.updateScoreboard();
+        this.renderLog();
+      }
+    };
+
+    // Log toggle
+    document.getElementById('log-header').onclick = () => {
+      this.logOpen = !this.logOpen;
+      document.getElementById('log-entries').classList.toggle('open', this.logOpen);
+      document.getElementById('log-toggle-icon').textContent = this.logOpen ? '▼' : '▶';
+    };
+
+    // Terminal input
+    document.getElementById('term-input').onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        const cmd = e.target.value.trim();
+        e.target.value = '';
+        // 对局结束后，空回车等同于 next（与图形模式 Enter 键行为一致）
+        if (!cmd && GameState.phase === 'ended') {
+          if (GameState.mode === 'lan') Game.restartMatch();
+          else Game.nextRound();
+          return;
+        }
+        Terminal.handle(cmd);
+      }
+    };
+
+    // 结果弹窗：Enter 键开启下一局（终端输入框聚焦时不触发，避免抢跑）
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && GameState.phase === 'ended' && document.activeElement !== document.getElementById('term-input')) {
+        if (GameState.mode === 'lan') Game.restartMatch();
+        else Game.nextRound();
+      }
+    });
+  },
+
+  showBidModal() {
+    const modal = document.getElementById('modal-overlay');
+    modal.classList.add('show');
+    this.selectedQty = 0;
+    this.selectedPip = 0;
+    document.getElementById('bid-error').textContent = '';
+
+    // Build qty selector
+    const qtySel = document.getElementById('qty-selector');
+    qtySel.innerHTML = '';
+    for (let q = 2; q <= 10; q++) {
+      const btn = document.createElement('button');
+      btn.className = 'sel-btn';
+      btn.textContent = q;
+      btn.dataset.val = q;
+      btn.onclick = () => {
+        qtySel.querySelectorAll('.sel-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        this.selectedQty = q;
+        document.getElementById('bid-error').textContent = '';
+      };
+      qtySel.appendChild(btn);
+    }
+
+    // Build pip selector
+    const pipSel = document.getElementById('pip-selector');
+    pipSel.innerHTML = '';
+    const pips = ['1⭐','2','3','4','5','6'];
+    for (let p = 1; p <= 6; p++) {
+      const btn = document.createElement('button');
+      btn.className = 'sel-btn';
+      btn.textContent = pips[p-1];
+      btn.dataset.val = p;
+      btn.onclick = () => {
+        pipSel.querySelectorAll('.sel-btn').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        this.selectedPip = p;
+        document.getElementById('bid-error').textContent = '';
+      };
+      pipSel.appendChild(btn);
+    }
+  },
+
+  hideBidModal() {
+    document.getElementById('modal-overlay').classList.remove('show');
+  },
+
+  confirmBid() {
+    const qty = this.selectedQty;
+    const pip = this.selectedPip;
+    const isDouble = document.getElementById('bid-double-cb')?.checked || false;
+    const err = document.getElementById('bid-error');
+
+    if (!qty || !pip) {
+      err.textContent = '请选择数量和点数！';
+      return;
+    }
+    // 斋状态下检查是否为"飞"（双倍破斋）
+    const feiBreak = GameState.isZhai && Rules.canFei(qty, pip, GameState.currentBidQty, GameState.currentBidPip, true);
+    if (!feiBreak && !Rules.isValidBid(qty, pip, GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai, isDouble)) {
+      const eff = isDouble ? qty * 2 : qty;
+      err.textContent = `叫分不符合规则：需大于 ${GameState.currentBidQty} 个 ${GameState.currentBidPip}`;
+      err.style.color = 'var(--red)';
+      return;
+    }
+    this.hideBidModal();
+    Game.playerCall(qty, pip, isDouble);
+  },
+
+  updateScoreboard() {
+    document.getElementById('p-score').textContent = GameState.playerScore + ' \u{1F37A}';
+    document.getElementById('a-score').textContent = GameState.opponentScore + ' \u{1F37A}';
+    document.getElementById('total-val').textContent = GameState.totalGames;
+    document.getElementById('wins-val').textContent = GameState.wins;
+    document.getElementById('losses-val').textContent = GameState.losses;
+    document.getElementById('streak-val').textContent = GameState.streak;
+    document.getElementById('lstreak-val').textContent = GameState.opponentStreak;
+    const md = document.getElementById('mult-display');
+    const m = GameState.multiplier;
+    md.textContent = `×${m} ${m===1?'基础':m===2?'劈×2':'反劈×4'}`;
+    md.className = `multiplier-badge mult-${m}`;
+    const zd = document.getElementById('zhai-display');
+    zd.style.display = GameState.isZhai ? 'inline-flex' : 'none';
+    zd.textContent = GameState.zhaiLocked ? '🔒封锁' : '斋';
+    zd.style.background = GameState.zhaiLocked ? 'var(--red)' : 'var(--purple)';
+    // 顺子归零徽章
+    const straightEl = document.getElementById('straight-display');
+    if (GameState.playerStraight) {
+      straightEl.style.display = 'inline-flex';
+      straightEl.textContent = '顺子归零';
+    } else {
+      straightEl.style.display = 'none';
+    }
+    // 双倍标记
+    document.getElementById('double-display').style.display = GameState.isDouble ? 'inline-flex' : 'none';
+    // 极速模式标记
+    document.getElementById('speed-display').style.display = GameConfig.speedMode ? 'inline-flex' : 'none';
+    // 积分赛目标
+    if (GameConfig.scoreTarget > 0) {
+      document.getElementById('target-display').style.display = 'inline-flex';
+      document.getElementById('target-display').textContent = `🎯 ${GameConfig.scoreTarget}分`;
+    } else {
+      document.getElementById('target-display').style.display = 'none';
+    }
+  },
+
+  updateTimerDisplay() {
+    const el = document.getElementById('turn-timer');
+    const secEl = document.getElementById('timer-seconds');
+    const left = GameState.turnTimeLeft;
+    if (left > 0 && GameState.phase === 'playing' && GameState.turn === 'player') {
+      el.style.display = 'block';
+      secEl.textContent = left;
+      secEl.style.color = left <= 10 ? 'var(--red)' : 'var(--accent)';
+      secEl.className = left <= 10 ? 'timer-urgent' : '';
+    } else {
+      el.style.display = 'none';
+    }
+  },
+
+  updateBidDisplay() {
+    const q = GameState.currentBidQty;
+    const p = GameState.currentBidPip;
+    const who = GameState.bidder;
+    if (q === 0) {
+      document.getElementById('bid-text').textContent = '— 尚未叫分 —';
+      document.getElementById('bid-sub').textContent = '等待第一手叫分';
+      document.getElementById('bid-who').textContent = '';
+    } else {
+      document.getElementById('bid-text').textContent = `${q} 个 ${p}`;
+      document.getElementById('bid-sub').textContent = `叫分方：${who==='player'?'你':'对手'}`;
+      document.getElementById('bid-who').textContent = GameState.isZhai ? '⚠️ 斋局 - 1不计万能' : '（1为万能牌）';
+    }
+  },
+
+  setButtons(playerTurn, phase) {
+    const ended = phase === 'ended';
+    const canAct = playerTurn && phase === 'playing';
+    const hasCurrentBid = GameState.currentBidQty > 0;
+
+    // 回合倒计时
+    if (canAct) Game.startTurnTimer(); else Game.stopTurnTimer();
+
+    document.getElementById('btn-call').disabled = !canAct;
+    // 有叫分时随时可以开（不管是不是你的回合 — 服务器端也允许）
+    const canOpen = hasCurrentBid && phase === 'playing';
+    document.getElementById('btn-open').disabled = !canOpen;
+    document.getElementById('btn-pi').disabled = !canAct || GameState.hasPi || GameState.multiplier >= 2;
+    document.getElementById('btn-fanpi').disabled = !canAct || !GameState.hasPi || GameState.hasFanPi || GameState.piBy !== 'opponent';
+    document.getElementById('btn-zhai').disabled = !canAct;
+    // 精准：需要有叫分，且当前叫分方是对手
+    document.getElementById('btn-exact').disabled = !canAct || !hasCurrentBid;
+    // 技能：本局每人限1次
+    document.getElementById('btn-skill').disabled = !canAct || GameState.playerSkillUsed;
+    // 技能按钮提示
+    document.getElementById('btn-skill').style.opacity = (canAct && !GameState.playerSkillUsed) ? '' : '0.3';
+    document.getElementById('btn-skill').title = GameState.playerSkillUsed ? '本局技能已使用' : '使用专属技能（每局限1次）';
+
+    document.getElementById('btn-zhai').textContent = GameState.isZhai ? '🔓 破斋' : '🚫 斋';
+    const piUsed = GameState.hasPi || GameState.multiplier >= 2;
+    document.getElementById('btn-pi').style.opacity = piUsed ? '0.3' : '';
+    document.getElementById('btn-pi').title = piUsed ? '本局已劈过' : '';
+    const fanpiDisabled = !GameState.hasPi || GameState.hasFanPi || GameState.piBy !== 'opponent';
+    document.getElementById('btn-fanpi').style.opacity = fanpiDisabled ? '0.3' : '';
+    document.getElementById('btn-fanpi').title = fanpiDisabled
+      ? (GameState.hasFanPi ? '本局已反劈' : GameState.piBy === 'player' ? '自己劈的不能反劈' : '需对手先劈才能反劈')
+      : '';
+    document.getElementById('btn-next').style.display = (ended || GameState.mode === 'lan') ? 'inline-flex' : 'none';
+  },
+
+  showResult(playerWon, result, multOverride, champion) {
+    const overlay = document.getElementById('result-overlay');
+    overlay.classList.add('show');
+    const mult = multOverride || GameState.multiplier;
+
+    const title = document.getElementById('result-title');
+    const streak = playerWon ? GameState.streak : GameState.opponentStreak;
+    const timedOut = !playerWon && GameState.timeoutLoss;
+    const timedOutWin = playerWon && GameState.timeoutWin;
+
+    let celebration = '';
+    if (champion === 'player') celebration = '🏆 恭喜！你获得了最终胜利！🏆';
+    else if (champion === 'opponent') celebration = '💔 对手获得了最终胜利…';
+    else if (playerWon && streak === 3)  celebration = '🎆 三连胜！';
+    else if (playerWon && streak === 5)  celebration = '🎇 五连胜！！';
+    else if (playerWon && streak === 10) celebration = '🎉👑 十连胜！王者降临！👑🎉';
+    else if (!playerWon && streak === 3)  celebration = '💪 三连败…别灰心';
+    else if (!playerWon && streak === 5)  celebration = '🍀 五连败…胜败乃兵家常事';
+    else if (!playerWon && streak === 10) celebration = '🦁 十连败…屡败屡战';
+    if (timedOut && !champion) celebration = '⏰ 超时判负！';
+    if (timedOutWin && !champion) celebration = '⏰ 对手超时未行动！';
+
+    const bombInfo = (GameState.playerBomb ? (GameState.playerBomb==='sky'?' 👑天牌':' 🎲豹子') : '') +
+                     (GameState.opponentBomb ? ' 对手'+(GameState.opponentBomb==='sky'?'👑天牌':'🎲豹子') : '');
+
+    title.innerHTML = champion
+      ? (champion === 'player'
+          ? `🏆 最终胜利！${celebration ? '<br><small>'+celebration+'</small>' : ''}`
+          : `💔 对手获胜！${celebration ? '<br><small>'+celebration+'</small>' : ''}`)
+      : (playerWon
+          ? (timedOutWin
+              ? `⏰ 对手超时！你赢了！${celebration ? '<br><small>'+celebration+'</small>' : ''}`
+              : `🎉 你赢了！${bombInfo}${celebration ? '<br><small>'+celebration+'</small>' : ''}`)
+          : (timedOut
+              ? `⏰ 超时判负！${celebration ? '<br><small>'+celebration+'</small>' : ''}`
+              : `💀 你输了！${bombInfo}${celebration ? '<br><small>'+celebration+'</small>' : ''}`));
+    title.className = `result-title ${playerWon ? 'win' : 'lose'}`;
+
+    // 连胜烟花粒子
+    if (playerWon && streak >= 3) this._fireworks(overlay);
+
+    const summary = document.getElementById('result-summary');
+    if (timedOut) {
+      summary.textContent = '⏰ 30秒回合时限已到，超时方判负';
+    } else {
+      summary.textContent = `共有 ${result.total} 个 ${result.pip}，叫分为 ${result.needed} 个`;
+    }
+
+    // Show dice (straight dice crossed out)
+    const dd = document.getElementById('result-dice-display');
+    dd.innerHTML = '';
+    const pDice = GameState.playerStraight ? ['×','×','×','×','×'] : GameState.playerDice;
+    const oDice = GameState.opponentStraight ? ['×','×','×','×','×'] : GameState.opponentDice;
+    const allDice = [...pDice, ...oDice];
+    allDice.forEach((v, i) => {
+      const d = document.createElement('div');
+      const cls = i < 5 ? 'player-r' : 'opponent-r';
+      const isStraight = v === '×';
+      const isCounted = !isStraight && (v === result.pip || (!GameState.isZhai && v === 1 && result.pip !== 1));
+      d.className = `result-die ${cls}${isCounted ? ' counted' : ''}`;
+      d.textContent = v;
+      if (i === 4) {
+        const sep = document.createElement('span');
+        sep.style = 'display:flex;align-items:center;color:var(--text2);font-size:0.8rem;margin:0 4px;';
+        sep.textContent = '|';
+        dd.appendChild(sep);
+      }
+      dd.appendChild(d);
+    });
+
+    const detail = document.getElementById('result-detail');
+    const wildNote = GameState.isZhai ? '' : '（含1作为万能牌）';
+    if (timedOut) {
+      detail.innerHTML = `
+        你的骰子：<strong>${GameState.playerDice.join(' ')}</strong><br>
+        对手骰子：<strong>${GameState.opponentDice.join(' ')}</strong><br>
+        ⏰ <strong>30秒倒计时结束未行动，超时判负</strong>
+      `;
+    } else {
+      detail.innerHTML = `
+        你的骰子：<strong>${GameState.playerDice.join(' ')}</strong><br>
+        对手骰子：<strong>${GameState.opponentDice.join(' ')}</strong><br>
+        ${result.pip}点总计 ${result.total} 个 ${wildNote}<br>
+        ${result.total >= result.needed
+          ? `达到叫分 ${result.needed}，<strong>开牌方</strong>本局落败`
+          : `未达叫分 ${result.needed}，<strong>叫分方</strong>本局落败`}
+      `;
+    }
+
+    const effMult = result.effectiveMult || mult || GameState.multiplier;
+    document.getElementById('result-mult').textContent =
+      `本局倍率 ×${effMult}${GameState.isDouble?' (含双倍)':''}，${playerWon ? '对手' : '你'}扣 ${effMult} 分`;
+  },
+
+  // 烟花粒子动画
+  _fireworks(container) {
+    const emojis = ['🎆','🎇','✨','🌟','💫','🎉','🎊','🔥','💥','⭐'];
+    for (let i = 0; i < 20; i++) {
+      setTimeout(() => {
+        const p = document.createElement('span');
+        p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+        p.style.cssText = `
+          position:fixed; font-size:${1.2+Math.random()*2}rem;
+          left:${10+Math.random()*80}%; top:${20+Math.random()*60}%;
+          pointer-events:none; z-index:999;
+          animation: fireworkBurst ${0.8+Math.random()*1.2}s ease-out forwards;
+        `;
+        document.body.appendChild(p);
+        setTimeout(() => p.remove(), 2000);
+      }, i * 60);
+    }
+  },
+
+  hideResult() {
+    if (GameState._resultTimer) {
+      clearTimeout(GameState._resultTimer);
+      GameState._resultTimer = null;
+    }
+    document.getElementById('result-overlay').classList.remove('show');
+  },
+
+  renderLog() {
+    const container = document.getElementById('log-entries');
+    container.innerHTML = GameState.logs.slice(0, 30).map(l =>
+      `<div class="log-entry ${l.cls}"><span class="log-time">${l.time}</span>${l.msg}</div>`
+    ).join('');
+  },
+
+  setAIThinking(show) {
+    document.getElementById('ai-thinking').classList.toggle('show', show);
+  },
+
+  setOppLastAction(text) {
+    const el = document.getElementById('opp-last-action');
+    el.innerHTML = `上轮：<strong>${text}</strong>`;
+  },
+
+  setPlayerLastAction(text) {
+    const el = document.getElementById('player-last-action');
+    el.innerHTML = `上轮：<strong>${text}</strong>`;
+  },
+
+  showSkillModal() {
+    const overlay = document.getElementById('skill-overlay');
+    overlay.style.display = 'flex';
+    const btns = overlay.querySelectorAll('.skill-opt');
+    btns.forEach(b => {
+      b.onclick = () => {
+        overlay.style.display = 'none';
+        Game.applySkill(b.dataset.skill);
+      };
+    });
+    document.getElementById('skill-cancel').onclick = () => { overlay.style.display = 'none'; };
+  },
+
+  toggleTerminal() {
+    this.terminalMode = !this.terminalMode;
+    document.getElementById('terminal-mode').classList.toggle('show', this.terminalMode);
+    document.getElementById('game-area').classList.toggle('hide', this.terminalMode);
+    document.getElementById('scoreboard').classList.toggle('hide', this.terminalMode);
+    document.getElementById('btn-terminal').textContent = this.terminalMode ? '🎨 图形模式' : '📟 终端模式';
+    document.getElementById('btn-terminal').classList.toggle('active', this.terminalMode);
+    if (this.terminalMode) Terminal.render();
+  }
+};
+
+// ============================================================
+// MODULE 8: TERMINAL MODE
+// ============================================================
+const Terminal = {
+  lines: [],
+
+  print(text, color='#00ff00') {
+    const out = document.getElementById('term-output');
+    const line = document.createElement('div');
+    line.className = 'term-line';
+    line.style.color = color;
+    line.textContent = text;
+    out.appendChild(line);
+    out.scrollTop = out.scrollHeight;
+    this.lines.push(text);
+  },
+
+  render() {
+    const out = document.getElementById('term-output');
+    out.innerHTML = '';
+    const gs = GameState;
+    const isZhai = gs.isZhai;
+    const P = '#ffdd44';  // 玩家颜色：金色
+    const O = '#4488ff';  // 对手颜色：蓝色
+    const B = '#ffaa00';  // 叫分颜色：橙色
+    const M = '#888888';  // 元数据：灰色
+
+    this.print('====== 吹牛5骰 ======', '#ffff00');
+    this.print(`模式: ${gs.mode === 'ai' ? 'AI对战 [' + gs.aiDiff + ']' : '局域网联机'}`, M);
+    this.print(`比分: 你 ${gs.playerScore}🍺 : ${gs.opponentScore}🍺 对手 | ×${gs.multiplier} | 斋:${isZhai?'开':'关'} | 局数:${gs.totalGames}`, M);
+    this.print(`战绩: ${gs.wins}胜 ${gs.losses}负 | 连胜${gs.streak} 连败${gs.opponentStreak}`, M);
+    this.print('---', M);
+    this.print(`对手骰子: ${gs.phase !== 'ended' ? '■ ■ ■ ■ ■ (已锁定)' : gs.opponentDice.join(' ')}`, O);
+    const curBid = gs.currentBidQty > 0 ? `叫分: ${gs.currentBidQty} 个 ${gs.currentBidPip}` : '尚未叫分';
+    this.print(`当前叫分: [${curBid}] 由 ${gs.bidder === 'player' ? '你' : '对手'} 叫出`, B);
+    this.print('---', M);
+    this.print(`你的骰子: ${gs.playerDice.join(' ')} (已锁定)`, P);
+    // 回合倒计时
+    if (gs.phase === 'playing' && gs.turn === 'player' && gs.turnTimeLeft > 0) {
+      const urgent = gs.turnTimeLeft <= 10;
+      this.print(`⏱ 剩余 ${gs.turnTimeLeft} 秒${urgent ? ' !!!' : ''}`, urgent ? '#ef4444' : '#f59e0b');
+    }
+    if (gs.phase === 'ended') {
+      this.print(`>>> 本局结束，按 Enter 或输入 next 开启下一局 <<<`, '#10b981');
+    } else if (gs.phase === 'playing') {
+      if (gs.turn === 'player') {
+        this.print('轮到你了！输入指令操作', '#ffdd44');
+      } else {
+        this.print('等待对手行动中...', '#888888');
+      }
+    }
+    this.print('');
+    this.print('指令: call X Y (叫骰) | open (开牌) | pi (劈) | fanpi (反劈) | zhai (斋) | next | help', '#555555');
+  },
+
+  handle(cmd) {
+    if (!cmd) return;
+    this.print(`> ${cmd}`, '#888888');
+    const parts = cmd.trim().toLowerCase().split(/\s+/);
+    const action = parts[0];
+
+    // help / next 不受回合限制
+    if (action === 'help') {
+      this.print('call X Y  - 叫 X 个 Y 点骰子', '#aaaaaa');
+      this.print('open      - 开牌（不认可叫分）', '#aaaaaa');
+      this.print('pi        - 劈（本局×2惩罚）', '#aaaaaa');
+      this.print('fanpi     - 反劈（叠加×4惩罚）', '#aaaaaa');
+      this.print('zhai      - 斋（切换1是否为万能）', '#aaaaaa');
+      this.print('exact     - 精准猜（猜当前叫分恰好正确）', '#aaaaaa');
+      this.print('skill <类型> - 技能: peek|block|rewind|double', '#aaaaaa');
+      this.print('next      - 下一局', '#aaaaaa');
+      return;
+    }
+    if (action === 'next') {
+      if (GameState.mode === 'lan') Game.restartMatch();
+      else Game.nextRound();
+      setTimeout(() => this.render(), 100);
+      return;
+    }
+
+    // 以下命令需要在 playing 状态且是玩家回合
+    if (GameState.phase !== 'playing') {
+      this.print('对局尚未开始或已结束！', '#ff4444');
+      return;
+    }
+    if (GameState.turn !== 'player') {
+      this.print('现在不是你的回合！', '#ff4444');
+      return;
+    }
+
+    switch(action) {
+      case 'call': {
+        const qty = parseInt(parts[1]);
+        const pip = parseInt(parts[2]);
+        if (!qty || !pip || pip < 1 || pip > 6 || qty < 2 || qty > 10) {
+          this.print('格式错误！例: call 3 4', '#ff4444'); break;
+        }
+        if (!Rules.isValidBid(qty, pip, GameState.currentBidQty, GameState.currentBidPip)) {
+          this.print(`叫分无效！需超过 ${GameState.currentBidQty} 个 ${GameState.currentBidPip}`, '#ff4444'); break;
+        }
+        Game.playerCall(qty, pip);
+        break;
+      }
+      case 'open':
+        if (GameState.currentBidQty === 0) { this.print('还没有叫分可以开！', '#ff4444'); break; }
+        if (!GameConfig.noLimitOpen && GameState.turn !== 'player') { this.print('现在不是你的回合！', '#ff4444'); break; }
+        Game.playerOpen(); break;
+      case 'pi':
+        if (GameState.hasPi || GameState.multiplier >= 2) { this.print('已经劈过了！', '#ff4444'); break; }
+        Game.playerPi(); break;
+      case 'fanpi':
+        if (!GameState.hasPi || GameState.hasFanPi) { this.print('无法反劈！', '#ff4444'); break; }
+        if (GameState.piBy !== 'opponent') { this.print('自己劈的不能反劈自己！等对手回应。', '#ff4444'); break; }
+        Game.playerFanPi(); break;
+      case 'zhai':
+        Game.playerZhai(); break;
+      case 'exact':
+        if (GameState.currentBidQty === 0) { this.print('还没有叫分可以精准猜！', '#ff4444'); break; }
+        Game.playerExact(); break;
+      case 'skill': {
+        const skillType = parts[1] || '';
+        const validSkills = ['peek','block','rewind','double','doublepenalty'];
+        const mapped = skillType === 'double' ? 'doublePenalty' : skillType;
+        if (!validSkills.includes(skillType) && !validSkills.includes(mapped)) {
+          this.print('技能类型: peek(窥骰) | block(封锁) | rewind(回溯) | double(加倍)', '#ff4444'); break;
+        }
+        Game.applySkill(mapped);
+        break;
+      }
+      default:
+        this.print(`未知指令: ${action}，输入 help 查看指令`, '#ff4444');
+    }
+
+    // Re-render state
+    setTimeout(() => this.render(), 100);
+  }
+};
+
+// ============================================================
+// MODULE 8B: TUTORIAL — 交互式新手引导
+// ============================================================
+const Tutorial = {
+  _step: 0,
+  _slides: [
+    {
+      emoji: '🎲',
+      title: '吹牛5骰（Liar\'s Dice）',
+      html: `<div class="tutorial-emoji">🎲</div>
+        <p>双方各有 <b>5 颗骰子</b>，摇完后只能看到自己的，对方的隐藏。</p>
+        <div class="tutorial-rule">🎯 目标：通过叫骰和开牌，<b>让对方输掉</b>。</div>
+        <p style="color:var(--text2);font-size:0.8rem;">每局输家扣分（🍺），先到目标分者胜。</p>`
+    },
+    {
+      emoji: '📢',
+      title: '叫骰（Call）',
+      html: `<div class="tutorial-emoji">📢</div>
+        <p>轮到你时，喊出「<b>X 个 Y 点</b>」的骰子。</p>
+        <div class="tutorial-rule">例：叫「3 个 4」→ 我猜全场至少 3 颗骰子点数为 4</div>
+        <div class="tutorial-rule">⭐ <b>1 点是万能牌</b>：计算时可当作任意点数（除非开了「斋」）</div>
+        <p style="color:var(--text2);font-size:0.8rem;">下家必须叫得比你更大：数量更多，或数量相同点数更大。</p>`
+    },
+    {
+      emoji: '‼️',
+      title: '开牌（Open）',
+      html: `<div class="tutorial-emoji">‼️</div>
+        <p>如果你<b>不相信</b>对方的叫分，可以选择<b>开牌</b>。</p>
+        <div class="tutorial-rule">双方骰子全部亮出，数一数目标点数实际有多少颗</div>
+        <p><b>够数</b> → 开牌方输 &nbsp;|&nbsp; <b>不够数</b> → 叫分方输</p>
+        <p style="color:var(--text2);font-size:0.8rem;">无需等到自己回合，任何时候都可以开牌。</p>`
+    },
+    {
+      emoji: '✂️',
+      title: '劈 / 反劈（Pi / FanPi）',
+      html: `<div class="tutorial-emoji">✂️</div>
+        <p><b>劈</b>：你的回合，不信对方叫分 → 惩罚<b>×2 倍</b></p>
+        <p><b>反劈</b>：对方劈了你 → 你反劈回去 → 惩罚<b>×4 倍</b></p>
+        <div class="tutorial-rule">⚠️ 每局只能劈一次，反劈也只能一次。风险与回报并存！</div>
+        <p style="color:var(--text2);font-size:0.8rem;">被劈后不能劈回去，只能反劈——先劈的一方才能反劈。</p>`
+    },
+    {
+      emoji: '🚫',
+      title: '斋 / 飞 / 精准 / 技能',
+      html: `<div class="tutorial-emoji">🚫</div>
+        <div class="tutorial-rule"><b>斋</b>：切换模式，1 点不再作万能 → 叫分变难，赌注变大</div>
+        <div class="tutorial-rule"><b>飞（破斋）</b>：斋状态下叫<b>双倍数量同点数</b> → 破斋恢复 1 万能</div>
+        <div class="tutorial-rule"><b>🎯 精准</b>：猜对方叫分<b>恰好正确</b>，猜中则对方输</div>
+        <div class="tutorial-rule"><b>⚡ 技能</b>：每局限用 1 次（窥骰/封锁/回溯/加倍）</div>`
+    },
+    {
+      emoji: '🎯',
+      title: '准备好了吗？',
+      html: `<div class="tutorial-emoji">🎯</div>
+        <p>总结口诀：</p>
+        <div class="tutorial-rule">📢 <b>叫骰往上加</b> — 数量或点数要变大</div>
+        <div class="tutorial-rule">‼️ <b>不信就开牌</b> — 任何时候都可以质疑</div>
+        <div class="tutorial-rule">✂️ <b>有信心就劈</b> — 加倍惩罚，高风险高回报</div>
+        <div class="tutorial-rule">🚫 <b>斋局无万能</b> — 1 不再万能，难度升级</div>
+        <p style="margin-top:12px;color:var(--accent);font-weight:700;">祝你好运！🎲</p>`
+    },
+  ],
+
+  show() {
+    this._step = 0;
+    document.getElementById('tutorial-overlay').style.display = 'flex';
+    this._render();
+  },
+
+  hide() {
+    document.getElementById('tutorial-overlay').style.display = 'none';
+    try { localStorage.setItem('liars_dice_tutorial_done', '1'); } catch(e) {}
+  },
+
+  next() {
+    if (this._step < this._slides.length - 1) { this._step++; this._render(); }
+    else this.hide();
+  },
+
+  prev() {
+    if (this._step > 0) { this._step--; this._render(); }
+  },
+
+  _render() {
+    const s = this._slides[this._step];
+    document.getElementById('tutorial-title').textContent = s.title;
+    document.getElementById('tutorial-content').innerHTML = s.html;
+    document.getElementById('tutorial-step').textContent = `${this._step + 1}/${this._slides.length}`;
+    document.getElementById('tutorial-prev').style.visibility = this._step === 0 ? 'hidden' : 'visible';
+    const nextBtn = document.getElementById('tutorial-next');
+    nextBtn.textContent = this._step === this._slides.length - 1 ? '🎲 开始游戏' : '下一步 ▶';
+
+    // Dots
+    const dots = document.getElementById('tutorial-dots');
+    dots.innerHTML = this._slides.map((_, i) =>
+      `<div class="dot${i === this._step ? ' active' : ''}"></div>`
+    ).join('');
+  }
+};
+
+// ============================================================
+// MODULE 8C: SOUND — Web Audio API 音效合成
+// ============================================================
+const Sound = {
+  _ctx: null,
+
+  _getCtx() {
+    if (!this._ctx) {
+      try { this._ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+    }
+    return this._ctx;
+  },
+
+  _play(type) {
+    if (!GameConfig.soundEnabled) return;
+    const ctx = this._getCtx();
+    if (!ctx) return;
+    try {
+      const now = ctx.currentTime;
+
+      if (type === 'roll') {
+        // 骰子滚动：短促噪声连击
+        for (let i = 0; i < 5; i++) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(200 + Math.random() * 400, now + i * 0.06);
+          gain.gain.setValueAtTime(0.08, now + i * 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.08);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(now + i * 0.06); osc.stop(now + i * 0.06 + 0.08);
+        }
+      } else if (type === 'call') {
+        // 叫骰：短促咔嗒声
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.1);
+        gain.gain.setValueAtTime(0.12, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.12);
+      } else if (type === 'open') {
+        // 开牌：重低音冲击
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(120, now);
+        osc.frequency.exponentialRampToValueAtTime(40, now + 0.25);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.start(now); osc.stop(now + 0.3);
+      } else if (type === 'win') {
+        // 胜利：上行音阶
+        [523, 659, 784, 1047].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + i * 0.12);
+          gain.gain.setValueAtTime(0.1, now + i * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.12 + 0.2);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(now + i * 0.12); osc.stop(now + i * 0.12 + 0.2);
+        });
+      } else if (type === 'lose') {
+        // 失败：下行音阶
+        [400, 300, 200].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + i * 0.2);
+          gain.gain.setValueAtTime(0.12, now + i * 0.2);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.2 + 0.25);
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.start(now + i * 0.2); osc.stop(now + i * 0.2 + 0.25);
+        });
+      }
+    } catch(e) { /* audio not available */ }
+  },
+
+  roll()  { this._play('roll'); },
+  call()  { this._play('call'); },
+  open()  { this._play('open'); },
+  win()   { this._play('win'); },
+  lose()  { this._play('lose'); },
+};
+
+// ============================================================
+// MODULE 8D: SHARE — 战绩分享卡片
+// ============================================================
+const Share = {
+  generate() {
+    const gs = GameState;
+    const modeLabel = gs.mode === 'ai' ? `AI ${gs.aiDiff}` : '局域网联机';
+    const winRate = gs.totalGames > 0 ? Math.round(gs.wins / gs.totalGames * 100) : 0;
+    return [
+      '🎲 吹牛5骰 对战战绩',
+      '━━━━━━━━━━━━━━━━',
+      `📊 总对局: ${gs.totalGames} 局`,
+      `🏆 胜: ${gs.wins}  |  💀 负: ${gs.losses}`,
+      `📈 胜率: ${winRate}%`,
+      `🔥 最高连胜: ${gs.maxStreak}`,
+      `❄️ 最高连败: ${gs.maxLStreak}`,
+      `🍺 总分: 你 ${gs.playerScore} : ${gs.opponentScore} 对手`,
+      `🎮 模式: ${modeLabel}`,
+      '━━━━━━━━━━━━━━━━',
+      `🕐 ${new Date().toLocaleString('zh')}`,
+    ].join('\n');
+  },
+
+  copy() {
+    const text = this.generate();
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => this._toast('✅ 战绩已复制！分享给朋友吧'));
+    } else {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      this._toast('✅ 战绩已复制！');
+    }
+  },
+
+  _toast(msg) {
+    const t = document.createElement('div');
+    t.className = 'share-toast';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 1800);
+    setTimeout(() => t.remove(), 2200);
+  }
+};
+
+// ============================================================
+// MODULE 9: CONFIG & PERSISTENCE
+// ============================================================
+const GameConfig = {
+  speedMode: false,    // 极速模式（10秒回合）
+  scoreTarget: 0,      // 血量积分赛目标分数（0=无限）
+  noLimitOpen: false,  // 无限制强开
+  turnTimeout: 30,     // 回合时限（秒）：30 / 60 / 90
+  soundEnabled: true,  // 音效开关
+
+  saveStats() {
+    try {
+      const data = {
+        totalGames: GameState.totalGames,
+        wins: GameState.wins,
+        losses: GameState.losses,
+        maxStreak: Math.max(GameState.maxStreak || 0, GameState.streak),
+        maxLStreak: Math.max(GameState.maxLStreak || 0, GameState.opponentStreak),
+        totalScore: GameState.playerScore,
+        timestamp: Date.now()
+      };
+      localStorage.setItem('liars_dice_stats', JSON.stringify(data));
+    } catch(e) {}
+  },
+
+  loadStats() {
+    try {
+      const raw = localStorage.getItem('liars_dice_stats');
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      GameState.totalGames = data.totalGames || 0;
+      GameState.wins = data.wins || 0;
+      GameState.losses = data.losses || 0;
+      GameState.maxStreak = data.maxStreak || 0;
+      GameState.maxLStreak = data.maxLStreak || 0;
+      GameState.playerScore = data.totalScore || 0;
+    } catch(e) {}
+  },
+
+  checkScoreTarget() {
+    if (this.scoreTarget <= 0) return null;
+    if (GameState.wins >= this.scoreTarget) return 'player';
+    if (GameState.losses >= this.scoreTarget) return 'opponent';
+    return null;
+  }
+};
+
+// ============================================================
+// MODULE 10: GAME CONTROLLER
+// ============================================================
+const Game = {
+  // ── 皮肤 ──────────────────────────────────────────────────
+  skinThemes: {
+    default: { playerBorder: '#fbbf24', playerGlow: 'rgba(251,191,36,0.3)', oppBorder: '#64748b' },
+    gold:     { playerBorder: '#ffd700', playerGlow: 'rgba(255,215,0,0.5)', oppBorder: '#b8860b' },
+    neon:     { playerBorder: '#a855f7', playerGlow: 'rgba(168,85,247,0.5)', oppBorder: '#7c3aed' },
+    ocean:    { playerBorder: '#06b6d4', playerGlow: 'rgba(6,182,212,0.5)', oppBorder: '#0891b2' },
+    ruby:     { playerBorder: '#ef4444', playerGlow: 'rgba(239,68,68,0.5)', oppBorder: '#dc2626' },
+    forest:   { playerBorder: '#22c55e', playerGlow: 'rgba(34,197,94,0.5)', oppBorder: '#16a34a' },
+  },
+
+  applySkin(skinName) {
+    const theme = this.skinThemes[skinName] || this.skinThemes.default;
+    const root = document.documentElement;
+    root.style.setProperty('--dice-p', theme.playerBorder);
+    root.style.setProperty('--dice-p-glow', theme.playerGlow);
+    root.style.setProperty('--dice-a', theme.oppBorder);
+  },
+
+  // ── 回合倒计时 ──────────────────────────────────────────────
+  startTurnTimer() {
+    this.stopTurnTimer();
+    if (GameState.phase !== 'playing' || GameState.turn !== 'player') return;
+    GameState.turnTimeLeft = GameConfig.speedMode ? 10 : GameConfig.turnTimeout;
+    UI.updateTimerDisplay();
+
+    GameState.turnTimer = setInterval(() => {
+      GameState.turnTimeLeft--;
+      UI.updateTimerDisplay();
+      if (UI.terminalMode) Terminal.render();
+
+      if (GameState.turnTimeLeft <= 0) {
+        this.stopTurnTimer();
+        if (GameState.phase === 'playing' && GameState.turn === 'player') {
+          this._onTurnTimeout();
+        }
+      }
+    }, 1000);
+  },
+
+  stopTurnTimer() {
+    if (GameState.turnTimer) {
+      clearInterval(GameState.turnTimer);
+      GameState.turnTimer = null;
+    }
+    GameState.turnTimeLeft = 0;
+    UI.updateTimerDisplay();
+  },
+
+  _onTurnTimeout() {
+    GameState.addLog('⏰ 超时！30秒内未行动，本局判负', 'lose-log');
+    GameState.timeoutLoss = true;  // 标记超时判负，供 showResult 区分显示
+    if (GameState.currentBidQty > 0) {
+      const result = Rules.resolveOpen(
+        GameState.playerDice, GameState.opponentDice,
+        GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+        GameState.playerStraight, GameState.opponentStraight
+      );
+      // LAN 模式：通知对手超时判负（带上局号防竞态）
+      if (GameState.mode === 'lan') {
+        LAN.send({ type: 'TIMEOUT', round: GameState.roundNum, result: { total: result.total, needed: result.needed, pip: result.pip, loser: result.loser }, mult: GameState.multiplier });
+      }
+      this._resolveRound(false, result);
+    } else {
+      // 第一手还没叫就超时：使用骰子数据但不依赖叫分
+      const allDice = [...GameState.playerDice, ...GameState.opponentDice];
+      if (GameState.mode === 'lan') {
+        LAN.send({ type: 'TIMEOUT', round: GameState.roundNum, result: { total: allDice.length, needed: 0, pip: '?', loser: 'player' }, mult: GameState.multiplier });
+      }
+      this._resolveRound(false, { total: allDice.length, needed: 0, pip: '?', loser: 'player' });
+    }
+  },
+  // ────────────────────────────────────────────────────────────
+
+  startAI() {
+    GameState.mode = 'ai';
+    GameState.phase = 'setup';
+    AI.difficulty = GameState.aiDiff;
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('game-area').style.display = 'flex';
+    document.getElementById('btn-reset-game').style.display = 'inline-block';
+    document.getElementById('mode-label').textContent = `AI对战 · ${GameState.aiDiff === 'easy' ? '新手' : GameState.aiDiff === 'normal' ? '普通' : '高手'}`;
+    document.getElementById('opp-name-score').textContent = 'AI';
+    document.getElementById('opp-panel-name').textContent = 'AI 对手';
+    document.getElementById('opp-role-badge').textContent = `AI·${GameState.aiDiff === 'easy' ? '新手' : GameState.aiDiff === 'normal' ? '普通' : '高手'}`;
+    this.beginRound();
+  },
+
+  startLAN(isHost, extra = {}) {
+    GameState.mode = 'lan';
+
+    // playerId 优先从 GAME_START 数据，否则从 CREATE/JOIN 保存的
+    GameState.myPlayerId = extra.playerId || GameState._savedPlayerId || '';
+    GameState.mySkin = extra.skin || 'default';
+    GameState.players = extra.players || [];
+
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('game-area').style.display = 'flex';
+    document.getElementById('btn-reset-game').style.display = 'inline-block';
+    document.getElementById('mode-label').textContent = '联机 · 1v1';
+    document.getElementById('opp-name-score').textContent = '对手';
+    document.getElementById('opp-panel-name').textContent = '对手';
+    document.getElementById('opp-role-badge').textContent = 'LAN';
+
+    // Apply skin
+    this.applySkin(GameState.mySkin);
+
+    // LAN message handlers
+    LAN.on('DICE_HASH', (data) => {
+      if (!data.hash) return;
+      const realDice = data.dice || [];
+      if (data.hash !== AntiCheat.hash(realDice)) {
+        alert('⚠️ 作弊预警：对方骰子数据哈希不匹配！对局已中断。');
+        LAN.disconnect();
+        return;
+      }
+      if (data.round === GameState.roundNum) {
+        // 当前局：直接应用
+        GameState.opponentLock = { hash: data.hash, dice: realDice };
+        GameState.opponentDice = realDice;
+        GameState.diceSynced = true;
+        GameState.addLog('✅ 对方骰子哈希校验通过', '');
+      } else if (data.round === GameState.roundNum + 1) {
+        // 对方提前进入下一局：缓存骰子，等本局开始时直接应用
+        GameState.pendingOpponentDice = { hash: data.hash, dice: realDice, round: data.round };
+        GameState.addLog('📦 已缓存对方下局骰子', '');
+      }
+      // 其他局号：旧消息，忽略
+    });
+    LAN.on('BID',   (data) => this._lanOpponentBid(data));
+    LAN.on('BID_REJECTED', (data) => {
+      // 对方拒绝了我们的叫分（网络延迟导致状态不同步），回退到对方的状态
+      GameState.addLog('⚠️ 叫分被对方拒绝，正在同步状态...', 'lose-log');
+      GameState.currentBidQty = data.currentQty || GameState.currentBidQty;
+      GameState.currentBidPip = data.currentPip || GameState.currentBidPip;
+      GameState.turn = 'player';           // 回到我方回合重新操作
+      UI.updateBidDisplay();
+      UI.setButtons(true, 'playing');
+      if (UI.terminalMode) Terminal.render();
+    });
+    LAN.on('OPEN',  (data) => this._lanOpponentOpen(data));
+    LAN.on('PI',    ()     => {
+      if (GameState.hasPi) {
+        console.warn('PI already set, ignoring opponent PI');
+        return;
+      }
+      GameState.multiplier = 2;
+      GameState.hasPi = true;
+      GameState.piBy = 'opponent';
+      GameState.turn = 'player';
+      UI.updateScoreboard();
+      UI.setButtons(true, 'playing');
+      UI.setOppLastAction('劈！');
+      GameState.addLog('对手：劈！×2', '');
+      if (UI.terminalMode) Terminal.render();
+    });
+    LAN.on('FANPI', ()     => {
+      if (!GameState.hasPi || GameState.hasFanPi) {
+        console.warn('FANPI received but invalid state, ignoring');
+        return;
+      }
+      GameState.multiplier = 4;
+      GameState.hasFanPi = true;
+      GameState.turn = 'player';
+      UI.updateScoreboard();
+      UI.setButtons(true, 'playing');
+      UI.setOppLastAction('反劈！');
+      GameState.addLog('对手：反劈！×4', '');
+      if (UI.terminalMode) Terminal.render();
+    });
+    LAN.on('ZHAI',  ()     => {
+      GameState.isZhai = !GameState.isZhai;
+      UI.updateScoreboard();
+      UI.updateBidDisplay();
+      DiceRenderer.renderRow('player-dice-row', GameState.playerDice, 'player', true, !GameState.isZhai);
+      UI.setOppLastAction(GameState.isZhai ? '开启斋' : '取消斋');
+      GameState.addLog(GameState.isZhai ? '对手：开启斋' : '对手：取消斋', '');
+      if (UI.terminalMode) Terminal.render();
+    });
+    LAN.on('NEXT_ROUND', () => {
+      // 如果仍在 playing（对方已结算但我们还没收到通知），先本地结算
+      if (GameState.phase === 'playing' && GameState._settledRound < GameState.roundNum) {
+        GameState.stopTurnTimer();
+        if (GameState.currentBidQty > 0) {
+          const result = Rules.resolveOpen(
+            GameState.playerDice, GameState.opponentDice,
+            GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+            GameState.playerStraight, GameState.opponentStraight
+          );
+          const playerWon = result.loser === 'opener';
+          Game._resolveRound(playerWon, result);
+          GameState.addLog('对手已进入下一局，自动结算', '');
+        } else {
+          GameState.phase = 'ended';
+          GameState._settledRound = GameState.roundNum;
+          GameState.lastRoundLoser = true;
+          GameState.addLog('对手已进入下一局', '');
+        }
+      }
+      if (GameState.phase === 'ended') Game.nextRound(true);  // silent，避免回声
+    });
+    // 对方发起重新摇骰子：当前局重置，双方重新摇骰，比分保留
+    LAN.on('RESTART_MATCH', () => {
+      Game.stopTurnTimer();
+      UI.hideResult();
+      // 只重置当前局状态，保留比分和战绩
+      GameState.playerDice = [];
+      GameState.opponentDice = [];
+      GameState.playerLock = null;
+      GameState.opponentLock = null;
+      GameState.currentBidQty = 0;
+      GameState.currentBidPip = 0;
+      GameState.bidder = null;
+      GameState.turn = 'player';
+      GameState.multiplier = 1;
+      GameState.isZhai = false;
+      GameState.hasPi = false;
+      GameState.hasFanPi = false;
+      GameState.piBy = null;
+      GameState.isDouble = false;
+      GameState.zhaiLocked = false;
+      GameState.playerStraight = false;
+      GameState.opponentStraight = false;
+      GameState.playerBomb = null;
+      GameState.opponentBomb = null;
+      GameState.playerSkillUsed = false;
+      GameState.opponentSkillUsed = false;
+      GameState.lastBidder = null;
+      GameState.lastBidQty = 0;
+      GameState.lastBidPip = 0;
+      GameState.pendingOpen = false;
+      GameState.timeoutLoss = false;
+      GameState.timeoutWin = false;
+      if (GameState._resultTimer) { clearTimeout(GameState._resultTimer); GameState._resultTimer = null; }
+      GameState.diceSynced = false;
+      GameState._lastBeginRound = 0;
+      GameState.addLog('🔄 对方发起了重新摇骰', '');
+      Game.beginRound();
+      if (UI.terminalMode) Terminal.render();
+    });
+    // 对手超时（带局号校验，防止竞态重复结算）
+    LAN.on('TIMEOUT', (data) => {
+      // 局号不匹配：可能是旧局消息在新局到达，忽略
+      if (data.round !== GameState.roundNum) {
+        console.warn('TIMEOUT: 局号不匹配 (msg round=' + data.round + ', my round=' + GameState.roundNum + ')，忽略');
+        return;
+      }
+      if (GameState.phase !== 'playing') {
+        console.warn('TIMEOUT: 非 playing 状态 (phase=' + GameState.phase + ')，忽略');
+        return;
+      }
+      // 已经结算过本局（NEXT_ROUND 先到达自动结算），忽略
+      if (GameState._settledRound >= GameState.roundNum) {
+        console.warn('TIMEOUT: 本局已结算，忽略');
+        return;
+      }
+      GameState.stopTurnTimer();
+      const result = Rules.resolveOpen(
+        GameState.playerDice, GameState.opponentDice,
+        GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+        GameState.playerStraight, GameState.opponentStraight
+      );
+      // 对手超时 = 本地方赢（无条件，超时惩罚）
+      GameState.timeoutWin = true;  // 标记己方因对手超时获胜
+      GameState.addLog('对手超时未行动，自动判负', 'win-log');
+      Game._resolveRound(true, result);
+    });
+    // 精准猜
+    LAN.on('EXACT', (data) => {
+      if (GameState.phase !== 'playing') return;
+      const result = Rules.resolveExact(
+        GameState.playerDice, GameState.opponentDice,
+        GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+        GameState.playerStraight, GameState.opponentStraight
+      );
+      const playerWon = result.exact;
+      GameState.addLog(`对手：精准猜！${result.exact ? '🎯 完全命中！' : '❌ 猜错了'}`);
+      Game._resolveRound(playerWon, { total: result.total, needed: GameState.currentBidQty, pip: result.pip, loser: playerWon ? 'bidder' : 'player', exactCall: true });
+    });
+    // 窥骰请求
+    LAN.on('PEEK_REQUEST', () => {
+      const idx = Math.floor(Math.random() * 5);
+      LAN.send({ type: 'PEEK_RESPONSE', idx, value: GameState.playerDice[idx] });
+      GameState.addLog('对手使用了窥骰技能', '');
+    });
+    LAN.on('PEEK_RESPONSE', (data) => {
+      alert(`👁 窥骰结果：对手第${data.idx+1}颗骰子是 ${data.value}`);
+    });
+    // 封锁技能
+    LAN.on('SKILL_BLOCK', () => {
+      GameState.isZhai = true; GameState.zhaiLocked = true;
+      UI.updateScoreboard(); UI.updateBidDisplay();
+      GameState.addLog('对手使用封锁（强制斋，不可破）', '');
+      if (UI.terminalMode) Terminal.render();
+    });
+    // 回溯技能
+    LAN.on('SKILL_REWIND', (data) => {
+      GameState.currentBidQty = data.qty;
+      GameState.currentBidPip = data.pip;
+      GameState.bidder = data.bidder;
+      GameState.isDouble = false;
+      UI.updateBidDisplay();
+      GameState.addLog('对手使用回溯（撤销叫分）', '');
+      if (UI.terminalMode) Terminal.render();
+    });
+    // 加倍技能
+    LAN.on('SKILL_DOUBLE', (data) => {
+      GameState.multiplier = data.mult;
+      UI.updateScoreboard();
+      GameState.addLog(`对手使用加倍技能（下次开牌×${data.mult}）`, '');
+      if (UI.terminalMode) Terminal.render();
+    });
+    // ── 断线 / 房间关闭处理（确保双方数据一致退出） ──
+    const _returnToMenu = () => {
+      Game.stopTurnTimer();
+      LAN.disconnect();
+      // 清空对战数据
+      GameState.playerScore = 0;
+      GameState.opponentScore = 0;
+      GameState.totalGames = 0;
+      GameState.wins = 0;
+      GameState.losses = 0;
+      GameState.streak = 0;
+      GameState.opponentStreak = 0;
+      GameState.maxStreak = 0;
+      GameState.maxLStreak = 0;
+      GameState.roundNum = 0;
+      GameState._settledRound = 0;
+      GameState.logs = [];
+      GameConfig.saveStats();
+      // 返回主菜单
+      document.getElementById('game-area').style.display = 'none';
+      document.getElementById('scoreboard').style.display = 'none';
+      document.getElementById('setup-screen').style.display = 'flex';
+      document.getElementById('btn-reset-game').style.display = 'none';
+      if (UI.terminalMode) {
+        document.getElementById('terminal-mode').classList.remove('show');
+        UI.terminalMode = false;
+        document.getElementById('btn-terminal').textContent = '📟 终端模式';
+        document.getElementById('btn-terminal').classList.remove('active');
+      }
+      GameState.mode = null;
+      GameState.phase = 'setup';
+    };
+
+    // 服务器通知：对手断线
+    LAN.on('PLAYER_DISCONNECTED', (data) => {
+      GameState.addLog('⚠️ 对手已断开连接', 'lose-log');
+      alert('对手已断开连接，即将返回主菜单。');
+      _returnToMenu();
+    });
+
+    // 服务器通知：对局中房间关闭（对手在对局中离开）
+    LAN.on('ROOM_CLOSED', (data) => {
+      const msg = data.message || '对手已离开，对局结束';
+      GameState.addLog('⚠️ ' + msg, 'lose-log');
+      alert(msg + '，即将返回主菜单。');
+      _returnToMenu();
+    });
+
+    // WebSocket 自身断开（服务器宕机 / 网络故障）
+    LAN.on('OPPONENT_DISCONNECTED', () => {
+      GameState.addLog('⚠️ 与服务器断开连接，返回主菜单', 'lose-log');
+      alert('与服务器断开连接，即将返回主菜单。');
+      _returnToMenu();
+    });
+
+    this.beginRound();
+  },
+
+  beginRound() {
+    GameState.reset();
+    GameState.phase = 'rolling';
+    const valid = GameState.rollDice();
+    if (!valid) {
+      alert('骰子生成异常，请刷新重试');
+      return;
+    }
+    GameState.addLog(`第 ${GameState.roundNum} 局开始`, '');
+
+    // 顺子归零 + 天牌提示
+    if (GameState.playerStraight) {
+      GameState.addLog('🔔 你摇出了顺子！本局你的骰子全部归零', 'lose-log');
+      setTimeout(() => alert('🔔 顺子归零！\n你摇出了顺子（12345/23456），本局你的骰子全部作废，计0颗！'), 500);
+    } else if (GameState.playerBomb) {
+      const label = GameState.playerBomb === 'sky' ? '👑 天牌（5个1）！叫分基数+3' : '🎲 豹子！叫分基数+2';
+      GameState.addLog(label, 'win-log');
+      setTimeout(() => alert(label + '\n本局你的叫分下限提升！'), 500);
+    }
+    if (GameState.opponentStraight) {
+      GameState.addLog('🔔 对手摇出了顺子！对手骰子全部归零', '');
+    } else if (GameState.opponentBomb) {
+      GameState.addLog(`对手${GameState.opponentBomb==='sky'?'👑天牌':'🎲豹子'}！叫分基数提升`, '');
+    }
+
+    // Show dice rows with animation
+    DiceRenderer.renderRow('player-dice-row', GameState.playerDice, 'player', true, true);
+    DiceRenderer.renderRow('opp-dice-row', GameState.opponentDice, 'opponent', false, false);
+
+    // Animate rolls
+    Sound.roll();
+    DiceRenderer.animateRoll('player-dice-row', GameState.playerDice, 'player', null);
+    DiceRenderer.animateRoll('opp-dice-row', GameState.opponentDice, 'opponent', null);
+
+    // LAN: 检查是否有对方提前发来的缓存骰子
+    if (GameState.mode === 'lan' && GameState.pendingOpponentDice
+        && GameState.pendingOpponentDice.round === GameState.roundNum) {
+      const pd = GameState.pendingOpponentDice;
+      GameState.opponentLock = { hash: pd.hash, dice: pd.dice };
+      GameState.opponentDice = pd.dice;
+      GameState.diceSynced = true;
+      GameState.pendingOpponentDice = null;
+      GameState.addLog('📦 已应用缓存骰子', '');
+    }
+
+    // Send hash to opponent
+    if (GameState.mode === 'lan') {
+      LAN.send({
+        type: 'DICE_HASH',
+        hash: GameState.playerLock.hash,
+        dice: GameState.playerDice,
+        round: GameState.roundNum
+      });
+    }
+
+    UI.updateScoreboard();
+    UI.updateBidDisplay();
+
+    // 第一局玩家先手，之后输家先手（AI / LAN 通用）
+    GameState.turn = GameState.roundNum === 1 ? 'player'
+      : (GameState.lastRoundLoser ? 'player' : 'opponent');
+
+    const startPlaying = () => {
+      GameState.phase = 'playing';
+      if (GameState.turn === 'opponent' && GameState.mode === 'ai') {
+        this.aiTurn();
+      } else {
+        UI.setButtons(GameState.turn === 'player', GameState.phase);
+      }
+      if (UI.terminalMode) Terminal.render();
+    };
+
+    if (GameState.mode === 'lan') {
+      // 等骰子同步完成再开始，最多等 5 秒超时
+      let waited = 0;
+      const checkSync = () => {
+        if (GameState.diceSynced) {
+          startPlaying();
+        } else if (waited < 5000) {
+          waited += 200;
+          setTimeout(checkSync, 200);
+        } else {
+          console.warn('骰子同步超时，强制开始');
+          startPlaying();
+        }
+      };
+      setTimeout(checkSync, 300);
+    } else {
+      setTimeout(startPlaying, 700);
+    }
+
+    // 终端模式：立即渲染初始对局画面（骰子滚动阶段）
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  playerCall(qty, pip, isDouble) {
+    if (GameState.phase !== 'playing' || GameState.turn !== 'player') return;
+    // 飞检测：斋状态下双倍同点数→破斋
+    const feiBreak = GameState.isZhai && !GameState.zhaiLocked && Rules.canFei(qty, pip, GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai);
+    if (feiBreak) { GameState.isZhai = false; }
+
+    // 保存上一手（供回溯）
+    GameState.lastBidder = GameState.bidder;
+    GameState.lastBidQty = GameState.currentBidQty;
+    GameState.lastBidPip = GameState.currentBidPip;
+
+    GameState.currentBidQty = qty;
+    GameState.currentBidPip = pip;
+    GameState.isDouble = isDouble || false;
+    GameState.bidder = 'player';
+    UI.updateBidDisplay();
+
+    const label = (isDouble ? '双倍 ' : '') + (feiBreak ? '飞！破斋 ' : '') + `叫 ${qty} 个 ${pip}`;
+    UI.setPlayerLastAction(label);
+    GameState.addLog('你：' + label);
+    Sound.call();
+
+    if (GameState.mode === 'lan') {
+      LAN.send({ type: 'BID', qty, pip, isDouble: isDouble || false, feiBreak });
+      GameState.turn = 'opponent';
+      UI.setButtons(false, 'playing');
+    } else {
+      GameState.turn = 'opponent';
+      UI.setButtons(false, 'playing');
+      setTimeout(() => this.aiTurn(), 800 + Math.random()*600);
+    }
+
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  playerOpen() {
+    // 开牌：任何人在有叫分时都可以开（传统规则）
+    if (GameState.phase !== 'playing') return;
+    if (GameState.currentBidQty === 0) return;
+    if (GameState.mode === 'lan' && GameState.pendingOpen) {
+      console.warn('Open already pending, ignoring duplicate');
+      return;
+    }
+    const isMyTurn = GameState.turn === 'player';
+    const result = Rules.resolveOpen(
+      GameState.playerDice, GameState.opponentDice,
+      GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+      GameState.playerStraight, GameState.opponentStraight
+    );
+    const playerWon = result.loser !== 'opener';
+    const openLabel = (!isMyTurn && GameConfig.noLimitOpen) ? '强开' : '开牌';
+    Sound.open();
+    GameState.addLog(`你：${openLabel}！结果：${result.total} 个 ${result.pip}，${playerWon?'你赢':'你输'}`);
+    this._resolveRound(playerWon, result);
+
+    if (GameState.mode === 'lan') {
+      GameState.pendingOpen = true;            // 防止双方同时开牌的竞态
+      // 附带结算结果供对方交叉校验，防止脏数据
+      LAN.send({ type: 'OPEN', result: { total: result.total, needed: result.needed, pip: result.pip, loser: result.loser }, mult: GameState.multiplier });
+    }
+  },
+
+  playerPi() {
+    if (GameState.phase !== 'playing' || GameState.turn !== 'player') return;
+    if (GameState.hasPi || GameState.multiplier >= 2) return;
+    GameState.multiplier = 2;
+    GameState.hasPi = true;
+    GameState.piBy = 'player';               // 记录：玩家劈的
+    GameState.turn = 'opponent';             // 轮到对手回应（可反劈或继续叫/开）
+    UI.updateScoreboard();
+    UI.setPlayerLastAction('劈！');
+    GameState.addLog('你：劈！×2');
+    if (GameState.mode === 'lan') {
+      LAN.send({ type: 'PI' });
+      UI.setButtons(false, 'playing');
+    } else {
+      // AI 模式：给 AI 回合，AI 可以决定是否反劈
+      setTimeout(() => this.aiTurn(), 800 + Math.random() * 600);
+    }
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  playerFanPi() {
+    if (GameState.phase !== 'playing' || GameState.turn !== 'player') return;
+    // 只有被劈方（piBy === 'opponent'）才能反劈
+    if (!GameState.hasPi || GameState.hasFanPi || GameState.piBy !== 'opponent') return;
+    GameState.multiplier = 4;
+    GameState.hasFanPi = true;
+    GameState.turn = 'opponent';             // 反劈后轮回到劈方
+    UI.updateScoreboard();
+    UI.setPlayerLastAction('反劈！');
+    GameState.addLog('你：反劈！×4');
+    if (GameState.mode === 'lan') {
+      LAN.send({ type: 'FANPI' });
+      UI.setButtons(false, 'playing');
+    } else {
+      // AI 模式：AI 是劈方，轮回到 AI 继续
+      setTimeout(() => this.aiTurn(), 800 + Math.random() * 600);
+    }
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  playerZhai() {
+    if (GameState.phase !== 'playing' || GameState.turn !== 'player') return;
+    if (GameState.zhaiLocked) { alert('封锁技能生效中，斋已锁定无法切换'); return; }
+    GameState.isZhai = !GameState.isZhai;
+    UI.updateScoreboard();
+    UI.updateBidDisplay();
+    const action = GameState.isZhai ? '开启斋' : '取消斋';
+    GameState.addLog('你：' + (GameState.isZhai ? '开启斋（1不计万能）' : '取消斋（恢复1为万能）'));
+    UI.setPlayerLastAction(action);
+    DiceRenderer.renderRow('player-dice-row', GameState.playerDice, 'player', true, !GameState.isZhai);
+    document.getElementById('btn-zhai').textContent = GameState.isZhai ? '🔓 破斋' : '🚫 斋';
+    if (GameState.mode === 'lan') LAN.send({ type: 'ZHAI' });
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  playerExact() {
+    if (GameState.phase !== 'playing' || GameState.turn !== 'player') return;
+    if (GameState.currentBidQty === 0) return;
+    const result = Rules.resolveExact(
+      GameState.playerDice, GameState.opponentDice,
+      GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+      GameState.playerStraight, GameState.opponentStraight
+    );
+    const playerWon = result.exact; // 猜对=赢
+    GameState.addLog(`你：精准猜！${result.exact ? '🎯 完全命中！' : '❌ 猜错了'}`);
+    this._resolveRound(playerWon, { total: result.total, needed: GameState.currentBidQty, pip: result.pip, loser: playerWon ? 'bidder' : 'player', exactCall: true });
+    if (GameState.mode === 'lan') LAN.send({ type: 'EXACT', result: { exact: result.exact, total: result.total, pip: result.pip } });
+  },
+
+  applySkill(type) {
+    if (GameState.playerSkillUsed) return;
+    GameState.playerSkillUsed = true;
+    switch(type) {
+      case 'peek': // 窥骰
+        if (GameState.mode === 'ai') {
+          const idx = Math.floor(Math.random() * 5);
+          alert(`👁 窥骰结果：对手第${idx+1}颗骰子是 ${GameState.opponentDice[idx]}`);
+        } else {
+          LAN.send({ type: 'PEEK_REQUEST' });
+        }
+        GameState.addLog('你：使用窥骰技能');
+        break;
+      case 'block': // 封锁
+        GameState.isZhai = true;
+        GameState.zhaiLocked = true;
+        UI.updateScoreboard(); UI.updateBidDisplay();
+        DiceRenderer.renderRow('player-dice-row', GameState.playerDice, 'player', true, false);
+        document.getElementById('btn-zhai').textContent = '🔒 封锁';
+        document.getElementById('btn-zhai').disabled = true;
+        GameState.addLog('你：使用封锁技能（本局强制斋，不可破）');
+        if (GameState.mode === 'lan') LAN.send({ type: 'SKILL_BLOCK' });
+        break;
+      case 'rewind': // 回溯
+        if (GameState.lastBidder && GameState.lastBidQty > 0) {
+          GameState.currentBidQty = GameState.lastBidQty;
+          GameState.currentBidPip = GameState.lastBidPip;
+          GameState.bidder = GameState.lastBidder;
+          GameState.isDouble = false;
+          UI.updateBidDisplay();
+          GameState.addLog('你：使用回溯技能（撤销上家叫分）');
+          if (GameState.mode === 'lan') LAN.send({ type: 'SKILL_REWIND', qty: GameState.lastBidQty, pip: GameState.lastBidPip, bidder: GameState.lastBidder });
+        }
+        break;
+      case 'doublePenalty': // 加倍惩罚
+        GameState.multiplier *= 2;
+        UI.updateScoreboard();
+        GameState.addLog(`你：使用加倍技能（下次开牌惩罚×${GameState.multiplier}）`);
+        if (GameState.mode === 'lan') LAN.send({ type: 'SKILL_DOUBLE', mult: GameState.multiplier });
+        break;
+    }
+    UI.setButtons(true, 'playing');
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  aiTurn() {
+    UI.setAIThinking(true);
+    const thinkTime = 800 + Math.random()*800;
+    setTimeout(() => {
+      UI.setAIThinking(false);
+      const decision = AI.decide(
+        GameState.opponentDice,
+        GameState.currentBidQty,
+        GameState.currentBidPip,
+        GameState.isZhai
+      );
+
+      if (decision.action === 'open') {
+        try {
+          // AI 是开牌方(opener)，loser==='opener' 表示AI输即玩家赢
+          const result = Rules.resolveOpen(
+            GameState.playerDice, GameState.opponentDice,
+            GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+            GameState.playerStraight, GameState.opponentStraight
+          );
+          const playerWon = result.loser === 'opener';
+          UI.setOppLastAction(`开牌！`);
+          GameState.addLog(`AI：开牌！结果：${result.total} 个 ${result.pip}，${playerWon?'你赢':'你输'}`);
+          this._resolveRound(playerWon, result);
+        } catch(e) {
+          console.error('AI open error:', e);
+          GameState.phase = 'ended';
+          UI.setButtons(false, 'ended');
+        }
+
+      } else if (decision.action === 'pi' && !GameState.hasPi) {
+        // AI 劈：倍率 ×2，轮到玩家决定是否反劈
+        GameState.multiplier = 2;
+        GameState.hasPi = true;
+        GameState.piBy = 'opponent';         // AI 劈的
+        GameState.turn = 'player';           // 玩家可以反劈或继续
+        UI.updateScoreboard();
+        UI.setOppLastAction('劈！');
+        GameState.addLog('AI：劈！×2');
+        UI.setButtons(true, 'playing');      // 启用玩家按钮
+
+      } else if (decision.action === 'fanpi') {
+        // AI 反劈：倍率 ×4，轮到玩家继续
+        GameState.multiplier = 4;
+        GameState.hasFanPi = true;
+        GameState.turn = 'player';           // 轮到玩家
+        UI.updateScoreboard();
+        UI.setOppLastAction('反劈！');
+        GameState.addLog('AI：反劈！×4');
+        UI.setButtons(true, 'playing');      // 启用玩家按钮
+
+      } else {
+        // AI bids
+        GameState.currentBidQty = decision.qty;
+        GameState.currentBidPip = decision.pip;
+        GameState.bidder = 'opponent';
+        GameState.turn = 'player';
+        UI.updateBidDisplay();
+        UI.setOppLastAction(`叫 ${decision.qty} 个 ${decision.pip}`);
+        GameState.addLog(`AI：叫 ${decision.qty} 个 ${decision.pip}`);
+        UI.setButtons(true, 'playing');
+      }
+
+      if (UI.terminalMode) Terminal.render();
+    }, thinkTime);
+  },
+
+  _lanOpponentBid(data) {
+    if (GameState.phase !== 'playing') return;
+    if (!Rules.isValidBid(data.qty, data.pip, GameState.currentBidQty, GameState.currentBidPip)) {
+      console.warn('对手叫分不合法！qty:', data.qty, 'pip:', data.pip, 'current:', GameState.currentBidQty, GameState.currentBidPip);
+      GameState.addLog('⚠️ 对手叫分不合法，已忽略（网络延迟导致？）', 'lose-log');
+      LAN.send({ type: 'BID_REJECTED', reason: 'invalid_bid', currentQty: GameState.currentBidQty, currentPip: GameState.currentBidPip });
+      return;
+    }
+    GameState.lastBidder = GameState.bidder;
+    GameState.lastBidQty = GameState.currentBidQty;
+    GameState.lastBidPip = GameState.currentBidPip;
+    if (data.feiBreak) GameState.isZhai = false;
+    GameState.currentBidQty = data.qty;
+    GameState.currentBidPip = data.pip;
+    GameState.isDouble = data.isDouble || false;
+    GameState.bidder = 'opponent';
+    GameState.turn = 'player';
+    UI.updateBidDisplay();
+    UI.setOppLastAction(`叫 ${data.qty} 个 ${data.pip}`);
+    GameState.addLog(`对手：叫 ${data.qty} 个 ${data.pip}`);
+    UI.setButtons(true, 'playing');
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  _lanOpponentOpen(data) {
+    if (GameState.phase !== 'playing') return;
+    try {
+      const result = Rules.resolveOpen(
+        GameState.playerDice, GameState.opponentDice,
+        GameState.currentBidQty, GameState.currentBidPip, GameState.isZhai,
+        GameState.playerStraight, GameState.opponentStraight
+      );
+      // 交叉校验：对方发来的结算结果必须与本地计算结果一致，防止脏数据
+      if (data && data.result && data.result.loser !== result.loser) {
+        console.error('⚠️ 开牌结果不一致！本地:', result.loser, '对方:', data.result.loser,
+                       'total:', result.total, 'vs', data.result.total);
+        GameState.addLog('⚠️ 对局数据不一致，请双方刷新页面！', 'lose-log');
+        alert('⚠️ 检测到对局数据不一致！\n请双方刷新页面重新开始。\n这可能由网络延迟或页面状态不同步引起。');
+        GameState.phase = 'ended';
+        UI.setButtons(false, 'ended');
+        return;
+      }
+      const playerWon = result.loser === 'opener';
+      GameState.addLog(`对手：开牌！结果：${result.total} 个 ${result.pip}，${playerWon?'你赢':'你输'}`);
+      this._resolveRound(playerWon, result);
+    } catch(e) {
+      console.error('_lanOpponentOpen error:', e);
+      alert('对手开牌处理出错：' + e.message + '\n请刷新页面重试');
+      GameState.phase = 'ended';
+      UI.setButtons(false, 'ended');
+    }
+  },
+
+  _resolveRound(playerWon, result) {
+    // 防止同一局被重复结算（TIMEOUT + NEXT_ROUND 竞态）
+    if (GameState._settledRound >= GameState.roundNum && GameState.roundNum > 0) {
+      console.warn('_resolveRound: 本局已结算，跳过重复调用 (round=' + GameState.roundNum + ')');
+      return;
+    }
+    GameState._settledRound = GameState.roundNum;
+    GameState.phase = 'ended';
+    GameState.lastRoundLoser = !playerWon;
+    let mult = GameState.multiplier;
+    // 双倍叫分：惩罚×2
+    if (GameState.isDouble) mult *= 2;
+    // 记录实际倍率供显示
+    result.effectiveMult = mult;
+
+    // Reveal opponent dice
+    DiceRenderer.renderRow('opp-dice-row', GameState.opponentDice, 'opponent', true, !GameState.isZhai);
+
+    if (playerWon) {
+      GameState.opponentScore += mult;
+      GameState.streak++;
+      GameState.opponentStreak = 0;
+      GameState.wins++;
+      if (GameState.streak > GameState.maxStreak) GameState.maxStreak = GameState.streak;
+    } else {
+      GameState.playerScore += mult;
+      GameState.streak = 0;
+      GameState.opponentStreak++;
+      GameState.losses++;
+      if (GameState.opponentStreak > GameState.maxLStreak) GameState.maxLStreak = GameState.opponentStreak;
+    }
+    GameState.totalGames++;
+    GameConfig.saveStats();
+    UI.updateScoreboard();
+    UI.setButtons(false, 'ended');
+
+    // 血量积分赛：检查是否有人达到目标分数
+    const champion = GameConfig.checkScoreTarget();
+
+    // Log
+    const bombNote = (GameState.playerBomb ? ` | ${GameState.playerBomb==='sky'?'👑天牌':'🎲豹子'}` : '') +
+                     (GameState.opponentBomb ? ` | 对手${GameState.opponentBomb==='sky'?'👑天牌':'🎲豹子'}` : '');
+    GameState.addLog(
+      `${playerWon ? '🎉 你赢了' : '💀 你输了'} | ×${mult} | 共 ${result.total} 个 ${result.pip}${bombNote}`,
+      playerWon ? 'win-log' : 'lose-log'
+    );
+    if (champion) {
+      GameState.addLog(
+        champion === 'player' ? '🏆 你率先达到目标分数，获得最终胜利！' : '💔 对手率先达到目标分数…',
+        champion === 'player' ? 'win-log' : 'lose-log'
+      );
+    }
+
+    if (playerWon) Sound.win(); else Sound.lose();
+
+    GameState._resultTimer = setTimeout(() => {
+      GameState._resultTimer = null;
+      UI.showResult(playerWon, result, mult, champion);
+      if (UI.terminalMode) Terminal.render();
+    }, 400);
+  },
+
+  nextRound(silent) {
+    if (GameState.phase !== 'ended' && GameState.roundNum > 0) return;
+    // 防重复：500ms 内只允许一次 beginRound
+    const now = Date.now();
+    if (now - GameState._lastBeginRound < 500) return;
+    GameState._lastBeginRound = now;
+    UI.hideResult();
+    if (GameState.mode === 'lan' && !silent) {
+      LAN.send({ type: 'NEXT_ROUND', round: GameState.roundNum + 1 });
+    }
+    this.beginRound();
+    if (UI.terminalMode) Terminal.render();
+  },
+
+  // 重新摇骰子：双方重新摇骰，当前局重置，比分/战绩保留（LAN 模式同步对方）
+  restartMatch() {
+    Game.stopTurnTimer();
+    UI.hideResult();
+
+    // 只重置当前局状态，保留比分和战绩
+    GameState.playerDice = [];
+    GameState.opponentDice = [];
+    GameState.playerLock = null;
+    GameState.opponentLock = null;
+    GameState.currentBidQty = 0;
+    GameState.currentBidPip = 0;
+    GameState.bidder = null;
+    GameState.turn = 'player';
+    GameState.multiplier = 1;
+    GameState.isZhai = false;
+    GameState.hasPi = false;
+    GameState.hasFanPi = false;
+    GameState.piBy = null;
+    GameState.isDouble = false;
+    GameState.zhaiLocked = false;
+    GameState.playerStraight = false;
+    GameState.opponentStraight = false;
+    GameState.playerBomb = null;
+    GameState.opponentBomb = null;
+    GameState.playerSkillUsed = false;
+    GameState.opponentSkillUsed = false;
+    GameState.lastBidder = null;
+    GameState.lastBidQty = 0;
+    GameState.lastBidPip = 0;
+    GameState.pendingOpen = false;
+    GameState.timeoutLoss = false;
+    GameState.timeoutWin = false;
+    if (GameState._resultTimer) { clearTimeout(GameState._resultTimer); GameState._resultTimer = null; }
+    GameState.diceSynced = false;
+    GameState._lastBeginRound = 0;
+
+    if (GameState.mode === 'lan') {
+      // 通知对方一起重新摇骰子
+      LAN.send({ type: 'RESTART_MATCH', timestamp: Date.now() });
+      GameState.addLog('🔄 你发起了重新摇骰', '');
+    } else {
+      GameState.addLog('🔄 重新摇骰', '');
+    }
+
+    this.beginRound();
+    if (UI.terminalMode) Terminal.render();
+  }
+};
+
+// ============================================================
+// INIT
+// ============================================================
+// 全局错误捕获（诊断用）
+window.onerror = function(msg, src, line, col, err) {
+  const el = document.getElementById('error-log');
+  if (el) el.textContent += '[' + new Date().toLocaleTimeString() + '] ' + msg + ' @ L' + line + '\n';
+  console.error(msg, src, line, col, err);
+  return false;
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  GameConfig.loadStats();
+
+  // 加载回合时限设置
+  try {
+    const savedTimeout = localStorage.getItem('liars_dice_timeout');
+    if (savedTimeout) {
+      GameConfig.turnTimeout = parseInt(savedTimeout);
+      document.querySelectorAll('#timeout-group-ai .diff-btn, #timeout-group-lan .diff-btn').forEach(b => {
+        b.classList.toggle('selected', parseInt(b.dataset.sec) === GameConfig.turnTimeout);
+      });
+    }
+  } catch(e) {}
+
+  // 加载音效设置
+  try {
+    const savedSound = localStorage.getItem('liars_dice_sound');
+    if (savedSound === '0') {
+      GameConfig.soundEnabled = false;
+      document.getElementById('btn-sound-toggle').textContent = '🔇';
+      document.getElementById('btn-sound-toggle').classList.add('active');
+    }
+  } catch(e) {}
+
+  UI.init();
+
+  // 首次访问自动弹出教程（仅在主菜单界面）
+  try {
+    if (!localStorage.getItem('liars_dice_tutorial_done')) {
+      setTimeout(() => {
+        if (GameState.phase === 'setup' || !GameState.mode) Tutorial.show();
+      }, 600);
+    }
+  } catch(e) {}
+
+  // Hide game and scoreboard, show setup
+  document.getElementById('game-area').style.display = 'none';
+  document.getElementById('scoreboard').style.display = 'none';
+  document.getElementById('btn-reset-game').style.display = 'none';
+});
+
+// Show scoreboard when game starts
+const _origStartAI = Game.startAI.bind(Game);
+Game.startAI = function() {
+  document.getElementById('scoreboard').style.display = 'flex';
+  _origStartAI();
+};
+const _origStartLAN = Game.startLAN.bind(Game);
+Game.startLAN = function(isHost) {
+  document.getElementById('scoreboard').style.display = 'flex';
+  _origStartLAN(isHost);
+};
+</script>
+</body>
+</html>
